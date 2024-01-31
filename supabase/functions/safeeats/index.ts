@@ -1,4 +1,4 @@
-import { Application, Router } from 'https://deno.land/x/oak@v13.0.0/mod.ts'
+import { Application, Router } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 import { createClient } from '@supabase/supabase-js'
 import * as Preferences from './preferences.ts'
 import * as Analyzer from './analyzer.ts'
@@ -28,8 +28,10 @@ router
     .get('/safeeats/preferences', async (ctx) => {
         await Preferences.get(ctx)
     })
-    .get('/inventory/:barcode', async (ctx) => {
+    .get('/safeeats/inventory/:barcode', async (ctx) => {
+        console.log('get inventory start')
         await Inventory.get(ctx, ctx.params.barcode)
+        console.log('get inventory end')
     })
     .post('/safeeats/analyze/:barcode', async (ctx) => {
         await Analyzer.analyze(ctx, ctx.params.barcode)

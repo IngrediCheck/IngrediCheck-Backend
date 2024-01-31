@@ -1,4 +1,4 @@
-import { Context } from "https://deno.land/x/oak@v13.0.0/mod.ts"
+import { Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 
 export async function get(ctx: Context, barcode: string) {
     const url = `https://world.openfoodfacts.org/api/v3/product/${barcode}.json`
