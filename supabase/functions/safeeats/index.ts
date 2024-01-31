@@ -1,29 +1,41 @@
-// Follow this setup guide to integrate the Deno language server with your editor:
-// https://deno.land/manual/getting_started/setup_your_environment
-// This enables autocomplete, go to definition, etc.
+import { Application, Router } from 'https://deno.land/x/oak@v13.0.0/mod.ts'
+import { createClient } from '@supabase/supabase-js'
+import * as Preferences from './preferences.ts'
+import * as Analyzer from './analyzer.ts'
+import * as Inventory from './inventory.ts'
 
-console.log("Hello from Functions!")
+const app = new Application()
 
-Deno.serve(async (req) => {
-  const { name } = await req.json()
-  const data = {
-    message: `Hello ${name}!`,
-  }
-
-  return new Response(
-    JSON.stringify(data),
-    { headers: { "Content-Type": "application/json" } },
-  )
+app.use((ctx, next) => {
+    ctx.state.supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+        {
+            auth: { persistSession: false },
+            global: { headers: { Authorization: ctx.request.headers.get('Authorization')! } }
+        }
+    )
+    ctx.state.activityId = crypto.randomUUID()
+    return next()
 })
 
-/* To invoke locally:
+const router = new Router()
 
-  1. Run `supabase start` (see: https://supabase.com/docs/reference/cli/supabase-start)
-  2. Make an HTTP request:
+router
+    .post('/safeeats/preferences', async (ctx) => {
+        await Preferences.set(ctx)
+    })
+    .get('/safeeats/preferences', async (ctx) => {
+        await Preferences.get(ctx)
+    })
+    .get('/inventory/:barcode', async (ctx) => {
+        await Inventory.get(ctx, ctx.params.barcode)
+    })
+    .post('/safeeats/analyze/:barcode', async (ctx) => {
+        await Analyzer.analyze(ctx, ctx.params.barcode)
+    })
 
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/safeeats' \
-    --header 'Authorization: Bearer ' \
-    --header 'Content-Type: application/json' \
-    --data '{"name":"Functions"}'
+app.use(router.routes())
+app.use(router.allowedMethods())
 
-*/
+await app.listen({ port: 8000 })
