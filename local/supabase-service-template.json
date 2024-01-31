@@ -1,0 +1,6 @@
+{
+    "url": "your supabase project url",
+    "anon_key": "your supabase anon key",
+    "email": "your username/email",
+    "password": "your password"
+}
