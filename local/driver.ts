@@ -3,7 +3,12 @@ import { supabase, signIn } from './kitchensink.ts'
 
 await signIn()
 
-const barcode = '028400310413'
+if (!Deno.args[0]) {
+    console.error("Error: No barcode specified.")
+    Deno.exit(1)
+}
+
+const barcode = Deno.args[0]
 
 const result = await supabase.functions.invoke(`safeeats/inventory/${barcode}`, { method: 'GET' })
 
