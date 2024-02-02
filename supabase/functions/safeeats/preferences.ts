@@ -5,12 +5,12 @@ import * as KitchenSink from "../shared/kitchensink.ts"
 export async function get(ctx: Context) {
     const userId = await KitchenSink.getUserId(ctx)
     const result = await ctx.state.supabaseClient
-    .from('preferences')
-    .select('preference')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single()
+        .from('preferences')
+        .select('preference')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
 
     if (result.error) {
         console.log(`Error fetching preference: ${result.error.message}`)
@@ -23,8 +23,11 @@ export async function get(ctx: Context) {
 }
 
 export async function set(ctx: Context) {
+
     const userId = await KitchenSink.getUserId(ctx)
-    const preference = await ctx.request.body.text()
+    const body = ctx.request.body({ type: 'text' })
+    const preference = await body.value
+
     const { error } = await ctx.state.supabaseClient
         .from('preferences')
         .insert({

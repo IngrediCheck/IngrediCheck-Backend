@@ -20,10 +20,10 @@ export async function get(ctx: Context, barcode: string) {
         console.log(`Unexpected product details: ${JSON.stringify(data, null, 2)}`)
         ctx.response.status = 404
     } else {
-        console.log(`brand: ${data.product.brand_owner}`)
-        console.log(`name: ${data.product.product_name}`)
-        console.log(`ingredients: ${data.product.ingredients}`)
-        console.log(`images: ${data.product.selected_images?.front?.display?.en}`)
+        // console.log(`brand: ${data.product.brand_owner}`)
+        // console.log(`name: ${data.product.product_name}`)
+        // console.log(`ingredients: ${data.product.ingredients}`)
+        // console.log(`images: ${data.product.selected_images?.front?.display?.en}`)
 
         if (data.product.brand_owner) {
             brand = data.product.brand_owner

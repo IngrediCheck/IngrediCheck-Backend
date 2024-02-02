@@ -29,12 +29,13 @@ router
         await Preferences.get(ctx)
     })
     .get('/safeeats/inventory/:barcode', async (ctx) => {
-        console.log('get inventory start')
         await Inventory.get(ctx, ctx.params.barcode)
-        console.log('get inventory end')
     })
-    .post('/safeeats/analyze/:barcode', async (ctx) => {
-        await Analyzer.analyze(ctx, ctx.params.barcode)
+    .post('/safeeats/analyze', async (ctx) => {
+        await Analyzer.analyze(ctx)
+    })
+    .patch('/safeeats/analyze/rate', async (ctx) => {
+        await Analyzer.rate(ctx)
     })
 
 app.use(router.routes())
