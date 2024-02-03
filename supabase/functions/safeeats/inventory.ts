@@ -60,6 +60,14 @@ export async function get(ctx: Context, barcode: string) {
             ]
         }
 
+        // Workaround for known issues with OpenFoodFacts data
+        if (log_json.data_source === 'openfoodfacts/v3') {
+            if (barcode === '0096619362776') {
+                // Label says 'Contains No Animal Rennet', but ingredient list has 'Animal Rennet'.
+                ingredients = ingredients.filter((i) => i.name !== 'Animal Rennet')
+            }
+        }
+
         result_json = {
             brand: brand,
             name: name,
@@ -78,7 +86,7 @@ export async function get(ctx: Context, barcode: string) {
         ctx.response.status = 200
     }
 
-    ctx.state.supabaseClient.functions.invoke('background/log_inventory', {
+    await ctx.state.supabaseClient.functions.invoke('background/log_inventory', {
         body: log_json,
         method: 'POST'
     })
