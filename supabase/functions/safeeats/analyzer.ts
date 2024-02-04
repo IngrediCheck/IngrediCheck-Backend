@@ -1,7 +1,7 @@
 
 import { Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 import * as DB from '../shared/db.ts'
-import { structuredAnalyzerAgent } from '../shared/llm/structuredanalyzeragent.ts'
+import { ingredientAnalyzerAgent } from '../shared/llm/ingredientanalyzeragent.ts'
 
 const MB = 1024 * 1024
 
@@ -37,7 +37,7 @@ export async function analyze(ctx: Context) {
         const ingredientRecommendations =
             product.ingredients.length === 0
                 ? []
-                : await structuredAnalyzerAgent(ctx, product, requestBody.userPreferenceText)
+                : await ingredientAnalyzerAgent(ctx, product, requestBody.userPreferenceText)
 
         ctx.response.status = 200
         ctx.response.body = ingredientRecommendations

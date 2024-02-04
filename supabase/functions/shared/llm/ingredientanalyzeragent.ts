@@ -13,7 +13,7 @@ type IngredientRecommendation = {
     reasoning: string
 }
 
-export async function structuredAnalyzerAgent(
+export async function ingredientAnalyzerAgent(
     ctx: Context,
     product: DB.Product,
     userPreferenceText: string)
@@ -111,7 +111,7 @@ export async function structuredAnalyzerAgent(
 
     const _ = await GenericAgent.genericAgent(
         ctx,
-        'structuredanalyzeragent',
+        'ingredientanalyzeragent',
         messages,
         agentFunctions,
         GenericAgent.ModelName.GPT4turbo,
