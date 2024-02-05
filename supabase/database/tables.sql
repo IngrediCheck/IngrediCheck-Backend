@@ -41,6 +41,34 @@ create policy "Insert for authenticated users" on public.log_inventory
 
 --------------------------------------------------------------------------------
 
+create table
+    public.log_extract (
+        user_id uuid not null,
+        client_activity_id uuid,
+        activity_id uuid not null,
+        created_at timestamp with time zone not null default now(),
+        start_time timestamp with time zone not null,
+        end_time timestamp with time zone not null,
+        product_images json not null,
+        barcode text,
+        name text,
+        brand text,
+        ingredients json,
+        response_status integer not null,
+        feedback_rating integer not null default 0,
+        constraint log_extract_key primary key (activity_id)
+    ) tablespace pg_default;
+
+create policy "Select for all authenticated users" on public.log_extract
+    for select
+    using (true);
+
+create policy "Insert for authenticated users" on public.log_extract
+    for insert
+    with check (auth.uid() = user_id);
+
+--------------------------------------------------------------------------------
+
 CREATE TABLE
 public.log_analyzebarcode (
     activity_id uuid not null,

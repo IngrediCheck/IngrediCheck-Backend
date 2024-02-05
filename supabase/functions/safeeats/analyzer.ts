@@ -9,6 +9,7 @@ export async function analyze(ctx: Context) {
 
     const startTime = new Date()
     let requestBody: any = {}
+    let product = DB.defaultProduct()
 
     try {
         const body = ctx.request.body({ type: "form-data" })
@@ -20,19 +21,41 @@ export async function analyze(ctx: Context) {
             clientActivityId: formData.fields['clientActivityId']
         }
 
-        const result = await ctx.state.supabaseClient
-            .from('log_inventory')
-            .select()
-            .eq('barcode', requestBody.barcode)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single()
+        if (requestBody.barcode !== undefined) {
+            const result = await ctx.state.supabaseClient
+                .from('log_inventory')
+                .select()
+                .eq('barcode', requestBody.barcode)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single()
 
-        if (result.error) {
-            throw result.error
+            if (result.error) {
+                throw result.error
+            }
+
+            product = result.data as DB.Product
+        } else {
+            const result = await ctx.state.supabaseClient
+                .from('log_extract')
+                .select()
+                .eq('client_activity_id', requestBody.clientActivityId)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single()
+            
+            if (result.error) {
+                throw result.error
+            }
+
+            product = {
+                barcode: result.data.barcode,
+                brand: result.data.brand,
+                name: result.data.name,
+                ingredients: result.data.ingredients,
+                images: []
+            }
         }
-
-        const product = result.data as DB.Product
 
         const ingredientRecommendations =
             product.ingredients.length === 0

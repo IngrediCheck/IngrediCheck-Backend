@@ -1,6 +1,6 @@
 import { Application, Router } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 import { createClient } from '@supabase/supabase-js'
-import * as KitchenSink from "../shared/kitchensink.ts"
+import * as KitchenSink from '../shared/kitchensink.ts'
 
 const app = new Application()
 
@@ -39,7 +39,7 @@ router
         }
         ctx.response.status = 201
     })
-    .post("/background/log_llmcalls", async (ctx) => {
+    .post('/background/log_llmcalls', async (ctx) => {
         const body = ctx.request.body({ type: 'json', limit: 0 })
         const body_json = await body.value
         const user_id = await KitchenSink.getUserId(ctx)
@@ -60,7 +60,7 @@ router
         }
         ctx.response.status = 201
     })
-    .post("/background/log_analyzebarcode", async (ctx) => {
+    .post('/background/log_analyzebarcode', async (ctx) => {
         const body = ctx.request.body({ type: 'json', limit: 0 })
         const body_json = await body.value
         const result = await ctx.state.supabaseClient
@@ -71,6 +71,23 @@ router
             })
         if (result.error) {
             console.log('supabaseClient.from(log_analyzebarcode).insert() failed: ', result.error)
+            ctx.response.status = 500
+            ctx.response.body = result.error
+            return
+        }
+        ctx.response.status = 201
+    })
+    .post('/background/log_extract', async (ctx) => {
+        const body = ctx.request.body({ type: 'json', limit: 0 })
+        const body_json = await body.value
+        const result = await ctx.state.supabaseClient
+            .from('log_extract')
+            .insert({
+                user_id: await KitchenSink.getUserId(ctx),
+                ...body_json
+            })
+        if (result.error) {
+            console.log('supabaseClient.from(log_extract).insert() failed: ', result.error)
             ctx.response.status = 500
             ctx.response.body = result.error
             return

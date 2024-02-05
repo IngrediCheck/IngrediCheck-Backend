@@ -1,20 +1,27 @@
 
 export type Ingredient = {
-    name: string,
-    vegan: boolean,
-    vegetarian: boolean,
-    ingredients: Ingredient[],
+    name: string
+    vegan: boolean
+    vegetarian: boolean
+    ingredients: Ingredient[]
 }
 
 export type Image = {
-    url: string,
+    url: string
 }
 
 export type Product = {
-    barcode: string,
-    data_source: string,
-    brand?: string,
-    name: string,
-    ingredients: Ingredient[],
-    images: Image[],
+    barcode?: string
+    data_source?: string
+    brand?: string
+    name?: string
+    ingredients: Ingredient[]
+    images: Image[]
+}
+
+export function defaultProduct(): Product {
+    return {
+        ingredients: [],
+        images: [],
+    }
 }

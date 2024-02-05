@@ -2,6 +2,7 @@ import { Application, Router } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 import { createClient } from '@supabase/supabase-js'
 import * as Preferences from './preferences.ts'
 import * as Analyzer from './analyzer.ts'
+import * as Extractor from './extractor.ts'
 import * as Inventory from './inventory.ts'
 
 const app = new Application()
@@ -36,6 +37,9 @@ router
     })
     .patch('/safeeats/analyze/rate', async (ctx) => {
         await Analyzer.rate(ctx)
+    })
+    .post('/safeeats/extract', async (ctx) => {
+        await Extractor.extract(ctx)
     })
 
 app.use(router.routes())
