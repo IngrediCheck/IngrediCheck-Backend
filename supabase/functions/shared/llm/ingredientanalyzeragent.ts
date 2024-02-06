@@ -36,12 +36,45 @@ export async function ingredientAnalyzerAgent(
         }
     }
 
-    function get_ingredients_list() {
-        return product.ingredients
+    function get_ingredients_depth(ingredients: DB.Ingredient[]): number {
+        let depth = 0
+        for (const i of ingredients) {
+            depth = Math.max(depth, get_ingredients_depth(i.ingredients) + 1)
+        }
+        return depth
+    }
+
+    function get_ingredients_list_depth2(ingredients: DB.Ingredient[]) {
+        return ingredients
             .map((i) => {
-                return `${i.name}${get_sub_ingredients_list(i.ingredients)}`
+                if (i.ingredients.length > 0) {
+                    return `${i.name} (${get_sub_ingredients_list(i.ingredients)})`
+                } else {
+                    return i.name
+                }
             })
             .join(', ')
+    }
+
+    function get_ingredients_list_depth3(ingredients: DB.Ingredient[]) {
+        return ingredients
+            .map((i) => {
+                if (i.ingredients.length > 0) {
+                    return `${i.name}: (${get_ingredients_list_depth2(i.ingredients)})`
+                } else {
+                    return i.name
+                }
+            })
+            .join('\n')
+    }
+
+    function get_ingredients_list() {
+        console.log(JSON.stringify(product.ingredients, null, 2))
+        if (get_ingredients_depth(product.ingredients) === 3) {
+            return get_ingredients_list_depth3(product.ingredients)
+        } else {
+            return get_ingredients_list_depth2(product.ingredients)
+        }
     }
 
     const functionObject = {
@@ -95,7 +128,9 @@ export async function ingredientAnalyzerAgent(
 
         Help me analyze this product:
         Name: ${product.name}
-        Ingredients: ${get_ingredients_list()}
+        Brand: ${product.brand}
+        Ingredients:
+        ${get_ingredients_list()}
     `
 
     const messages: GenericAgent.ChatMessage[] = [

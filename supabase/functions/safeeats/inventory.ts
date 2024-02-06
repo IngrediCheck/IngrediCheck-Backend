@@ -45,9 +45,16 @@ export async function get(ctx: Context, barcode: string) {
                                 name: i2.text,
                                 vegan: i2.vegan,
                                 vegetarian: i2.vegetarian,
-                                ingredients: []
+                                ingredients: i2.ingredients?.map((i3: any) => {
+                                    return {
+                                        name: i3.text,
+                                        vegan: i3.vegan,
+                                        vegetarian: i3.vegetarian,
+                                        ingredients: []
+                                    }
+                                }) ?? []
                             }
-                        })
+                        }) ?? []
                     }
                 })
         }

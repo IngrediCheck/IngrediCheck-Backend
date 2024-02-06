@@ -52,7 +52,7 @@ export async function analyze(ctx: Context) {
                 barcode: result.data.barcode,
                 brand: result.data.brand,
                 name: result.data.name,
-                ingredients: result.data.ingredients,
+                ingredients: result.data.ingredients ?? [],
                 images: []
             }
         }
