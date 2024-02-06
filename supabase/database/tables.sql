@@ -59,6 +59,8 @@ create table
         constraint log_extract_key primary key (activity_id)
     ) tablespace pg_default;
 
+ALTER TABLE public.log_extract ENABLE ROW LEVEL SECURITY;
+
 create policy "Select for all authenticated users" on public.log_extract
     for select
     using (true);
