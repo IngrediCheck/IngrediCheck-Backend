@@ -118,8 +118,12 @@ export async function ingredientAnalyzerAgent(
         packaged food items. Your task is to understand the user's dietary restrictions and
         preferences, and to analyze the ingredients in a product. You then provide a list
         of ingredients that do not agree with the user's dietary preferences, along with a
-        reason for why they do not match the user's preferences. Limit recommendations to
-        ingredients listed under the product.
+        reason for why they do not match the user's preferences.
+        
+        Rules:
+        - Recommendations must be relevant to user's stated preferences. Do not include
+        any "FYI" recommendations.
+        - Recommendations should only be for ingredients in this product.
     `
 
     const userMessage = `
