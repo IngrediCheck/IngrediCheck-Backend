@@ -17,7 +17,7 @@ export async function extract(ctx: Context) {
 
         requestBody = {
             clientActivityId: formData.fields['clientActivityId'],
-            productImages: formData.fields['productImages']
+            productImages: JSON.parse(formData.fields['productImages'])
         }
 
         const productImagesOCR = requestBody.productImages.map((i: any) => {
@@ -26,6 +26,11 @@ export async function extract(ctx: Context) {
 
         const result = await extractorAgent(ctx, productImagesOCR)
         product = result as DB.Product
+        product.images = requestBody.productImages.map((i: any) => {
+            return {
+                imageFileHash: i.imageFileHash,
+            }
+        })
 
         ctx.response.status = 200
         ctx.response.body = product
@@ -37,7 +42,7 @@ export async function extract(ctx: Context) {
 
     const endTime = new Date()
 
-    ctx.state.supabaseClient.functions.invoke('background/log_extract', {
+    await ctx.state.supabaseClient.functions.invoke('background/log_extract', {
         body: {
             activity_id: ctx.state.activityId,
             client_activity_id: requestBody.clientActivityId,
