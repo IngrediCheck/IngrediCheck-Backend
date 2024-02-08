@@ -10,7 +10,7 @@ if (!Deno.args[0]) {
 
 const barcode = Deno.args[0]
 
-const result = await supabase.functions.invoke(`safeeats/inventory/${barcode}`, { method: 'GET' })
+const result = await supabase.functions.invoke(`ingredicheck/inventory/${barcode}`, { method: 'GET' })
 
 if (result.error) {
     console.log(`Error fetching inventory: ${result.error.message}`)

@@ -23,22 +23,22 @@ app.use((ctx, next) => {
 const router = new Router()
 
 router
-    .post('/safeeats/preferences', async (ctx) => {
+    .post('/ingredicheck/preferences', async (ctx) => {
         await Preferences.set(ctx)
     })
-    .get('/safeeats/preferences', async (ctx) => {
+    .get('/ingredicheck/preferences', async (ctx) => {
         await Preferences.get(ctx)
     })
-    .get('/safeeats/inventory/:barcode', async (ctx) => {
+    .get('/ingredicheck/inventory/:barcode', async (ctx) => {
         await Inventory.get(ctx, ctx.params.barcode)
     })
-    .post('/safeeats/analyze', async (ctx) => {
+    .post('/ingredicheck/analyze', async (ctx) => {
         await Analyzer.analyze(ctx)
     })
-    .patch('/safeeats/analyze/rate', async (ctx) => {
+    .patch('/ingredicheck/analyze/rate', async (ctx) => {
         await Analyzer.rate(ctx)
     })
-    .post('/safeeats/extract', async (ctx) => {
+    .post('/ingredicheck/extract', async (ctx) => {
         await Extractor.extract(ctx)
     })
 
