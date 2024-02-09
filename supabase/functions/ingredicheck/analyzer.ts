@@ -58,14 +58,13 @@ export async function analyze(ctx: Context) {
         }
 
         const ingredientRecommendations =
-            product.ingredients.length === 0
-                ? []
-                : await ingredientAnalyzerAgent(ctx, product, requestBody.userPreferenceText)
+            product.ingredients && product.ingredients.length !== 0
+                ? await ingredientAnalyzerAgent(ctx, product, requestBody.userPreferenceText)
+                : []
 
         ctx.response.status = 200
         ctx.response.body = ingredientRecommendations
     } catch (error) {
-        console.log(`Error analyzing barcode: ${error.message}`)
         ctx.response.status = 500
         ctx.response.body = error
     }
@@ -106,7 +105,6 @@ export async function rate(ctx: Context) {
         })
 
     if (result.error) {
-        console.log(`Error rating barcode: ${result.error.message}`)
         ctx.response.status = 500
         ctx.response.body = result.error
     }

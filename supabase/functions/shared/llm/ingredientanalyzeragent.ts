@@ -36,7 +36,8 @@ export async function ingredientAnalyzerAgent(
         }
     }
 
-    function get_ingredients_depth(ingredients: DB.Ingredient[]): number {
+    function get_ingredients_depth(ingredients?: DB.Ingredient[]): number {
+        ingredients = ingredients ?? []
         let depth = 0
         for (const i of ingredients) {
             depth = Math.max(depth, get_ingredients_depth(i.ingredients) + 1)
@@ -44,10 +45,11 @@ export async function ingredientAnalyzerAgent(
         return depth
     }
 
-    function get_ingredients_list_depth2(ingredients: DB.Ingredient[]) {
+    function get_ingredients_list_depth2(ingredients?: DB.Ingredient[]) {
+        ingredients = ingredients ?? []
         return ingredients
             .map((i) => {
-                if (i.ingredients.length > 0) {
+                if (i.ingredients && i.ingredients.length > 0) {
                     return `${i.name} (${get_sub_ingredients_list(i.ingredients)})`
                 } else {
                     return i.name
@@ -56,10 +58,11 @@ export async function ingredientAnalyzerAgent(
             .join(', ')
     }
 
-    function get_ingredients_list_depth3(ingredients: DB.Ingredient[]) {
+    function get_ingredients_list_depth3(ingredients?: DB.Ingredient[]) {
+        ingredients = ingredients ?? []
         return ingredients
             .map((i) => {
-                if (i.ingredients.length > 0) {
+                if (i.ingredients && i.ingredients.length > 0) {
                     return `${i.name}: (${get_ingredients_list_depth2(i.ingredients)})`
                 } else {
                     return i.name
@@ -69,7 +72,6 @@ export async function ingredientAnalyzerAgent(
     }
 
     function get_ingredients_list() {
-        console.log(JSON.stringify(product.ingredients, null, 2))
         if (get_ingredients_depth(product.ingredients) === 3) {
             return get_ingredients_list_depth3(product.ingredients)
         } else {

@@ -1,9 +1,9 @@
 
 export type Ingredient = {
     name: string
-    vegan: boolean
-    vegetarian: boolean
-    ingredients: Ingredient[]
+    vegan?: boolean
+    vegetarian?: boolean
+    ingredients?: Ingredient[]
 }
 
 export type Image = {
@@ -15,7 +15,7 @@ export type Product = {
     data_source?: string
     brand?: string
     name?: string
-    ingredients: Ingredient[]
+    ingredients?: Ingredient[]
     images: Image[]
 }
 
