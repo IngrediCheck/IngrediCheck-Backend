@@ -18,7 +18,7 @@ export async function extract(ctx: Context) {
         requestBody = {
             clientActivityId: formData.fields['clientActivityId'],
             productImages: JSON.parse(formData.fields['productImages']),
-            barcode: JSON.parse(formData.fields['barcode'])
+            barcode: formData.fields['barcode']
         }
 
         const productImagesOCR = requestBody.productImages.map((i: any) => {
