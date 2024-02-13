@@ -8,7 +8,6 @@ export async function get(ctx: Context, barcode: string) {
     let brand: string | undefined = undefined
     let name: string | undefined = undefined
     let ingredients: any[] = []
-    let images: any[] = []
 
     let result_json: any = {}
     let log_json: any = {
@@ -59,13 +58,7 @@ export async function get(ctx: Context, barcode: string) {
                 })
         }
 
-        if (data.product.selected_images?.front?.display?.en) {
-            images = [
-                {
-                    url: data.product.selected_images.front.display.en
-                }
-            ]
-        }
+        const images = extractDisplayImageUrls(data.product.selected_images)
 
         // Workaround for known issues with OpenFoodFacts data
         if (log_json.data_source === 'openfoodfacts/v3') {
@@ -99,4 +92,27 @@ export async function get(ctx: Context, barcode: string) {
     })
 
     ctx.response.body = result_json
+}
+
+type SelectedImages = {
+    [key: string]: {
+        display: {
+            [key: string]: string
+        }
+    }
+}
+
+type ImageUrl = {
+    url: string
+}
+
+function extractDisplayImageUrls(selectedImages?: SelectedImages): ImageUrl[] {
+    if (selectedImages) {
+        return Object.values(selectedImages).map(image => {
+            return {
+                url: image.display.en
+            }
+        })
+    }
+    return []
 }
