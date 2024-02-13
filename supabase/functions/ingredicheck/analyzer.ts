@@ -109,5 +109,32 @@ export async function rate(ctx: Context) {
         ctx.response.body = result.error
     }
 
-    ctx.response.status = 200
+    ctx.response.status = 204
+}
+
+export async function submitFeedback(ctx: Context) {
+
+    const body = ctx.request.body({ type: "form-data" })
+    const formData = await body.value.read({ maxSize: 10 * MB })
+
+    const requestBody = {
+        clientActivityId: formData.fields['clientActivityId'],
+        feedbackText: formData.fields['feedbackText']
+    }
+
+    const result = await ctx.state.supabaseClient
+        .from('log_analyzebarcode')
+        .update({
+            feedback_text: requestBody.feedbackText
+        })
+        .match({
+            client_activity_id: requestBody.clientActivityId
+        })
+
+    if (result.error) {
+        ctx.response.status = 500
+        ctx.response.body = result.error
+    }
+
+    ctx.response.status = 204
 }
