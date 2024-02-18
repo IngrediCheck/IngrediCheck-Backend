@@ -1,6 +1,5 @@
 import { Application, Router } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 import { createClient } from '@supabase/supabase-js'
-import * as Preferences from './preferences.ts'
 import * as Analyzer from './analyzer.ts'
 import * as Extractor from './extractor.ts'
 import * as Inventory from './inventory.ts'
@@ -23,12 +22,6 @@ app.use((ctx, next) => {
 const router = new Router()
 
 router
-    .post('/ingredicheck/preferences', async (ctx) => {
-        await Preferences.set(ctx)
-    })
-    .get('/ingredicheck/preferences', async (ctx) => {
-        await Preferences.get(ctx)
-    })
     .get('/ingredicheck/inventory/:barcode', async (ctx) => {
         await Inventory.get(ctx, ctx.params.barcode)
     })
