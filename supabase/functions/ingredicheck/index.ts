@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import * as Analyzer from './analyzer.ts'
 import * as Extractor from './extractor.ts'
 import * as Inventory from './inventory.ts'
+import * as Feedback from './feedback.ts'
 
 const app = new Application()
 
@@ -37,6 +38,9 @@ router
     })
     .post('/ingredicheck/extract', async (ctx) => {
         await Extractor.extract(ctx)
+    })
+    .post('/ingredicheck/feedback', async (ctx) => {
+        await Feedback.submitFeedback(ctx)
     })
 
 app.use(router.routes())
