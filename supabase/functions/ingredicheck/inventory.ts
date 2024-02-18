@@ -1,6 +1,6 @@
 import { Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 
-export async function get(ctx: Context, barcode: string) {
+export async function get(ctx: Context, barcode: string, clientActivityId: string | null) {
     const url = `https://world.openfoodfacts.org/api/v3/product/${barcode}.json`
     const response = await fetch(url)
     const data = await response.json()
@@ -13,6 +13,7 @@ export async function get(ctx: Context, barcode: string) {
     let log_json: any = {
         barcode: barcode,
         data_source: 'openfoodfacts/v3',
+        client_activity_id: clientActivityId,
     }
 
     if (data.status === 'failure') {

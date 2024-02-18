@@ -1,10 +1,10 @@
-
 --------------------------------------------------------------------------------
 
 create table
     public.log_inventory (
         created_at timestamp with time zone not null default now(),
         user_id uuid not null,
+        client_activity_id uuid,
         barcode text not null,
         data_source text not null,
         name text,
