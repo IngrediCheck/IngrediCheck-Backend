@@ -31,6 +31,8 @@ export async function submitFeedback(ctx: Context) {
                 reasons: feedback.reasons,
                 note: feedback.note,
                 images: feedback.images?.map((i: any) => i.imageFileHash)
+            }, {
+                onConflict: ['client_activity_id']
             })
         if (result.error) {
             console.log('supabaseClient.from(log_feedback).insert() failed: ', result.error)

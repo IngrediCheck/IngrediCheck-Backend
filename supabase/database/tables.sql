@@ -35,7 +35,7 @@ create table
         reasons text[],
         note text,
         images text[],
-        constraint log_feedback_key primary key (activity_id)
+        constraint log_feedback_key primary key (client_activity_id)
     );
 
 ALTER TABLE public.log_feedback ENABLE ROW LEVEL SECURITY;
