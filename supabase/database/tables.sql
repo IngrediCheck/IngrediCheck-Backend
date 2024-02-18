@@ -1,3 +1,49 @@
+
+--------------------------------------------------------------------------------
+
+create table
+    public.log_images (
+        created_at timestamp with time zone not null default now(),
+        user_id uuid not null,
+        client_activity_id uuid not null,
+        activity_id uuid not null,
+        image_file_hash text not null,
+        image_ocrtext_ios text not null,
+        barcode_ios text,
+        constraint log_images_key primary key (image_file_hash)
+    );
+
+alter table public.log_images enable row level security;
+
+create policy "Select for all authenticated users" on public.log_images
+    for select
+    using (true);
+
+create policy "Insert for authenticated users" on public.log_images
+    for insert
+    with check (auth.uid() = user_id);
+
+--------------------------------------------------------------------------------
+
+create table
+    public.log_feedback (
+        created_at timestamp with time zone not null default now(),
+        user_id uuid not null,
+        client_activity_id uuid not null,
+        activity_id uuid not null,
+        rating integer not null,
+        reason json,
+        note text,
+        images text[],
+        constraint log_feedback_key primary key (activity_id)
+    );
+
+ALTER TABLE public.log_feedback ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY user_update_own_log_infer ON public.log_feedback
+    FOR ALL
+    USING (auth.uid() = user_id);
+
 --------------------------------------------------------------------------------
 
 create table
@@ -33,13 +79,13 @@ create table
         created_at timestamp with time zone not null default now(),
         start_time timestamp with time zone not null,
         end_time timestamp with time zone not null,
-        product_images json not null,
         barcode text,
         name text,
         brand text,
         ingredients json,
         response_status integer not null,
         feedback_rating integer not null default 0,
+        images text[],
         constraint log_extract_key primary key (activity_id)
     ) tablespace pg_default;
 

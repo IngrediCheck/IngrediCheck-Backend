@@ -45,18 +45,27 @@ export async function extract(ctx: Context) {
 
     const endTime = new Date()
 
+    await ctx.state.supabaseClient.functions.invoke('background/log_images', {
+        body: {
+            activity_id: ctx.state.activityId,
+            client_activity_id: requestBody.clientActivityId,
+            product_images: requestBody.productImages
+        },
+        method: 'POST'
+    })
+
     await ctx.state.supabaseClient.functions.invoke('background/log_extract', {
         body: {
             activity_id: ctx.state.activityId,
             client_activity_id: requestBody.clientActivityId,
             start_time: startTime,
             end_time: endTime,
-            product_images: requestBody.productImages,
             response_status: ctx.response.status,
             barcode: product.barcode,
             brand: product.brand,
             name: product.name,
             ingredients: product.ingredients,
+            images: product.images.map((i: any) => i.imageFileHash)
         },
         method: 'POST'
     })

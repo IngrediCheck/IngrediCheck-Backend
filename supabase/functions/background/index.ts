@@ -20,6 +20,31 @@ app.use((ctx, next) => {
 const router = new Router()
 
 router
+    .post('/background/log_images', async (ctx) => {
+        const body = ctx.request.body({ type: 'json', limit: 0 })
+        const body_json = await body.value
+        const user_id = await KitchenSink.getUserId(ctx)
+        const entries = body_json.product_images.map((image: any) => {
+            return {
+                user_id: user_id,
+                client_activity_id: body_json.client_activity_id,
+                activity_id: body_json.activity_id,
+                image_file_hash: image.imageFileHash,
+                image_ocrtext_ios: image.imageOCRText,
+                bacrode_ios: image.barcode
+            }
+        })
+        const result = await ctx.state.supabaseClient
+            .from('log_images')
+            .insert(entries)
+        if (result.error) {
+            console.log('supabaseClient.from(log_images).insert() failed: ', result.error)
+            ctx.response.status = 500
+            ctx.response.body = result.error
+            return
+        }
+        ctx.response.status = 201
+    })
     .post('/background/log_inventory', async (ctx) => {
         const body = ctx.request.body({ type: 'json', limit: 0 })
         const body_json = await body.value
