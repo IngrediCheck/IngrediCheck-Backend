@@ -23,14 +23,14 @@ export async function submitFeedback(ctx: Context) {
 
         const result = await ctx.state.supabaseClient
             .from('log_feedback')
-            .insert({
+            .upsert({
                 user_id: await KitchenSink.getUserId(ctx),
                 activity_id: ctx.state.activityId,
                 client_activity_id: clientActivityId,
                 rating: feedback.rating,
-                reason: feedback.reason,
+                reasons: feedback.reasons,
                 note: feedback.note,
-                images: feedback.images.map((i: any) => i.imageFileHash)
+                images: feedback.images?.map((i: any) => i.imageFileHash)
             })
         if (result.error) {
             console.log('supabaseClient.from(log_feedback).insert() failed: ', result.error)

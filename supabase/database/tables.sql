@@ -32,7 +32,7 @@ create table
         client_activity_id uuid not null,
         activity_id uuid not null,
         rating integer not null,
-        reason json,
+        reasons text[],
         note text,
         images text[],
         constraint log_feedback_key primary key (activity_id)
