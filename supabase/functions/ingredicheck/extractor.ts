@@ -17,8 +17,7 @@ export async function extract(ctx: Context) {
 
         requestBody = {
             clientActivityId: formData.fields['clientActivityId'],
-            productImages: JSON.parse(formData.fields['productImages']),
-            barcode: formData.fields['barcode']
+            productImages: JSON.parse(formData.fields['productImages'])
         }
 
         const productImagesOCR = requestBody.productImages.map((i: any) => {
@@ -27,7 +26,9 @@ export async function extract(ctx: Context) {
 
         const result = await extractorAgent(ctx, productImagesOCR)
         product = result as DB.Product
-        product.barcode = requestBody.barcode
+        product.barcode = requestBody.productImages.find((i: any) => {
+            return i.barcode !== undefined
+        })?.barcode
         product.images = requestBody.productImages.map((i: any) => {
             return {
                 imageFileHash: i.imageFileHash,
