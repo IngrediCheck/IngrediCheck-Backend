@@ -31,7 +31,7 @@ router
                 activity_id: body_json.activity_id,
                 image_file_hash: image.imageFileHash,
                 image_ocrtext_ios: image.imageOCRText,
-                bacrode_ios: image.barcode
+                barcode_ios: image.barcode
             }
         })
         const result = await ctx.state.supabaseClient
