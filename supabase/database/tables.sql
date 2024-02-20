@@ -84,7 +84,6 @@ create table
         brand text,
         ingredients json,
         response_status integer not null,
-        feedback_rating integer not null default 0,
         images text[],
         constraint log_extract_key primary key (activity_id)
     ) tablespace pg_default;
@@ -112,8 +111,6 @@ public.log_analyzebarcode (
     request_body json not null,
     response_status integer not null,
     response_body json not null,
-    feedback_rating integer not null default 0,
-    feedback_text text,
     constraint log_infer_key primary key (activity_id)
 ) tablespace pg_default;
 

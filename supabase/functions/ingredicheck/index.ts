@@ -30,12 +30,6 @@ router
     .post('/ingredicheck/analyze', async (ctx) => {
         await Analyzer.analyze(ctx)
     })
-    .patch('/ingredicheck/analyze/rate', async (ctx) => {
-        await Analyzer.rate(ctx)
-    })
-    .patch('/ingredicheck/analyze/feedback', async (ctx) => {
-        await Analyzer.submitFeedback(ctx)
-    })
     .post('/ingredicheck/extract', async (ctx) => {
         await Extractor.extract(ctx)
     })
