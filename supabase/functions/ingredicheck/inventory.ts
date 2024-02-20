@@ -109,10 +109,13 @@ type ImageUrl = {
 
 function extractDisplayImageUrls(selectedImages?: SelectedImages): ImageUrl[] {
     if (selectedImages) {
-        return Object.values(selectedImages).map(image => {
-            return {
-                url: image.display.en
+        return Object.values(selectedImages).flatMap(image => {
+            if (image.display?.en) {
+                return [{
+                    url: image.display.en
+                }]
             }
+            return []
         })
     }
     return []
