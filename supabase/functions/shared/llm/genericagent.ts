@@ -43,6 +43,7 @@ function log_llmcall(
 ) {
     return {
         id: crypto.randomUUID(),
+        client_activity_id: ctx.state.clientActivityId,
         activity_id: ctx.state.activityId,
         conversation_id: conversationId,
         parentconversation_ids: parentConversationIds,

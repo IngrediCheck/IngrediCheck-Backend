@@ -20,6 +20,8 @@ export async function extract(ctx: Context) {
             productImages: JSON.parse(formData.fields['productImages'])
         }
 
+        ctx.state.clientActivityId = requestBody.clientActivityId
+
         const productImagesOCR = requestBody.productImages.map((i: any) => {
             return i.imageOCRText
         })
@@ -48,7 +50,7 @@ export async function extract(ctx: Context) {
     await ctx.state.supabaseClient.functions.invoke('background/log_images', {
         body: {
             activity_id: ctx.state.activityId,
-            client_activity_id: requestBody.clientActivityId,
+            client_activity_id: ctx.state.clientActivityId,
             product_images: requestBody.productImages
         },
         method: 'POST'
@@ -57,7 +59,7 @@ export async function extract(ctx: Context) {
     await ctx.state.supabaseClient.functions.invoke('background/log_extract', {
         body: {
             activity_id: ctx.state.activityId,
-            client_activity_id: requestBody.clientActivityId,
+            client_activity_id: ctx.state.clientActivityId,
             start_time: startTime,
             end_time: endTime,
             response_status: ctx.response.status,

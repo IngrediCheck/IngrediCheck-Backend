@@ -126,6 +126,7 @@ CREATE TABLE
 public.log_llmcall (
     id uuid not null,
     created_at timestamp with time zone not null default now(),
+    client_activity_id uuid,
     activity_id uuid not null,
     user_id uuid not null,
     conversation_id uuid not null,

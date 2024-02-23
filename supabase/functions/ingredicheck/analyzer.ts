@@ -21,6 +21,8 @@ export async function analyze(ctx: Context) {
             clientActivityId: formData.fields['clientActivityId']
         }
 
+        ctx.state.clientActivityId = requestBody.clientActivityId
+
         if (requestBody.barcode !== undefined) {
             const result = await ctx.state.supabaseClient
                 .from('log_inventory')
@@ -39,7 +41,7 @@ export async function analyze(ctx: Context) {
             const result = await ctx.state.supabaseClient
                 .from('log_extract')
                 .select()
-                .eq('client_activity_id', requestBody.clientActivityId)
+                .eq('client_activity_id', ctx.state.clientActivityId)
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .single()
@@ -74,7 +76,7 @@ export async function analyze(ctx: Context) {
     ctx.state.supabaseClient.functions.invoke('background/log_analyzebarcode', {
         body: {
             activity_id: ctx.state.activityId,
-            client_activity_id: requestBody.clientActivityId,
+            client_activity_id: ctx.state.clientActivityId,
             start_time: startTime,
             end_time: endTime,
             request_body: requestBody,
