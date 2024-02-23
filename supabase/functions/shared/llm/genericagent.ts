@@ -5,6 +5,7 @@ export enum ModelName {
     GPT4 = 'gpt-4-1106-preview',
     GPT4turbo = 'gpt-4-0125-preview',
     GPT3dot5 = 'gpt-3.5-turbo-0125',
+    ExtractorFineTuned = 'ft:gpt-3.5-turbo-1106:personal::8vUeW0QJ',
     Mistral = 'mistralai/Mistral-7B-Instruct-v0.1',
     Mixtral = 'mistralai/Mixtral-8x7B-Instruct-v0.1'
 }

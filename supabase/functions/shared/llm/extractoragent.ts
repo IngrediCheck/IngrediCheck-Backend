@@ -1,6 +1,7 @@
 import { Context } from "https://deno.land/x/oak@v12.6.0/mod.ts"
 import * as DB from '../db.ts'
 import * as GenericAgent from './genericagent.ts'
+import { extractorAgentSystemMessage, extractorAgentFunctions } from './extractoragent_types.ts'
 
 export async function extractorAgent(
     ctx: Context,
@@ -18,78 +19,12 @@ export async function extractorAgent(
         record_product_details: record_product_details
     }
 
-    const agentFunctions: GenericAgent.ChatFunction[] = [
-        {
-            name: 'record_product_details',
-            description: 'Record the product details',
-            parameters: {
-                type: 'object',
-                properties: {
-                    product: {
-                        type: 'object',
-                        properties: {
-                            brand: { type: 'string' },
-                            name: { type: 'string' },
-                            ingredients: {
-                                type: 'array',
-                                items: {
-                                    type: 'object',
-                                    properties: {
-                                        name: { type: 'string' },
-                                        ingredients: {
-                                            type: 'array',
-                                            items: {
-                                                type: 'object',
-                                                properties: {
-                                                    name: { type: 'string' },
-                                                    ingredients: {
-                                                        type: 'array',
-                                                        items: {
-                                                            type: 'object',
-                                                            properties: {
-                                                                name: { type: 'string' },
-                                                            },
-                                                            required: ['name']
-                                                        }
-                                                    }
-                                                },
-                                                required: ['name']
-                                            }
-                                        }
-                                    },
-                                    required: ['name']
-                                }
-                            }
-                        },
-                        required: ['ingredients']
-                    }
-                },
-                required: ['product']
-            }
-        }
-    ]
-
-    const systemMessage = `
-        You are an expert in reading OCR text of food product images. You specialize 
-        in extracting name, brand, and list of ingredients from the OCR text
-        of food product images.
-
-        How to respond:
-        - OCR text may have some spelling mistakes or inconsistencies. Use your superior
-        built-in knowledge of food ingredients to:
-            - correct any spelling mistakes in the OCR text.
-            - Think critically about extracted data and fix any mistakes:
-            e.g does it sound like a brand name?
-            e.g does it sound like a product name?
-            e.g does it sound like an ingredient name?
-    `
-
     const userMessage = productImagesOCR.join('\n---------------\n')
 
     const messages: GenericAgent.ChatMessage[] = [
         {
             role: 'system',
-            content: systemMessage
+            content: extractorAgentSystemMessage
         },
         {
             role: 'user',
@@ -101,8 +36,8 @@ export async function extractorAgent(
         ctx,
         'extractoragent',
         messages,
-        agentFunctions,
-        GenericAgent.ModelName.GPT4turbo,
+        extractorAgentFunctions,
+        GenericAgent.ModelName.ExtractorFineTuned,
         functionObject,
         crypto.randomUUID(),
         []
