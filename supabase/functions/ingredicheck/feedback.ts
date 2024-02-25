@@ -12,14 +12,16 @@ export async function submitFeedback(ctx: Context) {
         const clientActivityId = formData.fields['clientActivityId']
         const feedback = JSON.parse(formData.fields['feedback'])
 
-        await ctx.state.supabaseClient.functions.invoke('background/log_images', {
-            body: {
-                activity_id: ctx.state.activityId,
-                client_activity_id: clientActivityId,
-                product_images: feedback.images
-            },
-            method: 'POST'
-        })
+        if (feedback.images) {
+            await ctx.state.supabaseClient.functions.invoke('background/log_images', {
+                body: {
+                    activity_id: ctx.state.activityId,
+                    client_activity_id: clientActivityId,
+                    product_images: feedback.images
+                },
+                method: 'POST'
+            })
+        }
 
         const result = await ctx.state.supabaseClient
             .from('log_feedback')
