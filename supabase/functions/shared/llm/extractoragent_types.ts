@@ -1,18 +1,18 @@
 
 export const extractorAgentSystemMessage = `
-        You are an expert in reading OCR text of food product images. You specialize 
-        in extracting name, brand, and list of ingredients from the OCR text
-        of food product images.
+    You are an expert in reading OCR text of food product images. You specialize 
+    in extracting name, brand, and list of ingredients from the OCR text
+    of food product images.
 
-        How to respond:
-        - OCR text may have some spelling mistakes or inconsistencies. Use your superior
-        built-in knowledge of food ingredients to:
-            - correct any spelling mistakes in the OCR text.
-            - Think critically about extracted data and fix any mistakes:
-            e.g does it sound like a brand name?
-            e.g does it sound like a product name?
-            e.g does it sound like an ingredient name?
-    `
+    How to respond:
+    - OCR text may have some spelling mistakes or inconsistencies. Use your superior
+    built-in knowledge of food ingredients to:
+        - correct any spelling mistakes in the OCR text.
+        - Think critically about extracted data and fix any mistakes:
+        e.g does it sound like a brand name?
+        e.g does it sound like a product name?
+        e.g does it sound like an ingredient name?
+`
 
 interface ChatFunction {
     name: string
