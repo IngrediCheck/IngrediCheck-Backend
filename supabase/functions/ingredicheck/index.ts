@@ -24,7 +24,7 @@ const router = new Router()
 
 router
     .get('/ingredicheck/inventory/:barcode', async (ctx) => {
-        const clientActivityId = ctx.request.headers.get('clientActivityId')
+        const clientActivityId = ctx.request.url.searchParams.get("clientActivityId")
         await Inventory.get(ctx, ctx.params.barcode, clientActivityId)
     })
     .post('/ingredicheck/analyze', async (ctx) => {
