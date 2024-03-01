@@ -4,6 +4,7 @@ import * as Analyzer from './analyzer.ts'
 import * as Extractor from './extractor.ts'
 import * as Inventory from './inventory.ts'
 import * as Feedback from './feedback.ts'
+import * as History from './history.ts'
 
 const app = new Application()
 
@@ -26,6 +27,9 @@ router
     .get('/ingredicheck/inventory/:barcode', async (ctx) => {
         const clientActivityId = ctx.request.url.searchParams.get("clientActivityId")
         await Inventory.get(ctx, ctx.params.barcode, clientActivityId)
+    })
+    .get('/ingredicheck/history', async (ctx) => {
+        await History.get(ctx)
     })
     .post('/ingredicheck/analyze', async (ctx) => {
         await Analyzer.analyze(ctx)

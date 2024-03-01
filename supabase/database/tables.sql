@@ -152,5 +152,48 @@ CREATE POLICY user_update_own_log_llmcall ON public.log_llmcall
 
 --------------------------------------------------------------------------------
 
+CREATE OR REPLACE FUNCTION get_check_history()
+RETURNS TABLE (
+    created_at TIMESTAMP WITH TIME ZONE,
+    client_activity_id UUID,
+    barcode TEXT,
+    name TEXT,
+    brand TEXT,
+    ingredients JSON,
+    images JSON,
+    ingredient_recommendations JSON,
+    rating INTEGER
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        la.created_at,
+        la.client_activity_id,
+        COALESCE(li.barcode, le.barcode) AS barcode,
+        COALESCE(li.name, le.name) AS name,
+        COALESCE(li.brand, le.brand) AS brand,
+        COALESCE(li.ingredients, le.ingredients) AS ingredients,
+        COALESCE(
+            li.images,
+            (SELECT json_agg(json_build_object('imageFileHash', text_val)) FROM unnest(le.images) AS dt(text_val))
+        ) AS images,
+        la.response_body AS ingredient_recommendations,
+        COALESCE(lf.rating, 0) AS rating
+    FROM
+        public.log_analyzebarcode la
+    LEFT JOIN public.log_inventory li 
+        ON la.client_activity_id = li.client_activity_id 
+    LEFT JOIN public.log_extract le 
+        ON la.client_activity_id = le.client_activity_id 
+    LEFT JOIN public.log_feedback lf
+        ON la.client_activity_id = lf.client_activity_id
+    WHERE
+        li.client_activity_id IS NOT NULL
+        OR
+        le.client_activity_id IS NOT NULL
+    ORDER BY
+        la.created_at DESC;
+END;
+$$ LANGUAGE plpgsql;
 
 --------------------------------------------------------------------------------
