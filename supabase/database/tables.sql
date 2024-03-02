@@ -188,9 +188,13 @@ BEGIN
     LEFT JOIN public.log_feedback lf
         ON la.client_activity_id = lf.client_activity_id
     WHERE
-        li.client_activity_id IS NOT NULL
-        OR
-        le.client_activity_id IS NOT NULL
+        la.created_at > '2024-02-24'::date
+        AND
+        (
+            li.client_activity_id IS NOT NULL
+            OR
+            le.client_activity_id IS NOT NULL
+        )
     ORDER BY
         la.created_at DESC;
 END;
