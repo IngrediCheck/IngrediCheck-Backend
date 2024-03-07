@@ -1364,6 +1364,34 @@ the freezer and let thaw before eating.
                 })
             }
         }
+    ],
+    [
+        {
+            role: 'user',
+            content: `TEAR HERE\nCHEESE -\nKEEP REFRIGERATED\nNATURAL\nWHOI LE MILK\nMOZZARELLA\nLOW MOISTURE\nSHREDDED CHEESE\nCUT STRAIGHT FROM THE BLOCK\nmoi ovomeA\ntel yns etsiagihtef\neolboon sgsesl Si\n(bašoos)\nPS pm0d mbi\nsni Inentun s roum wod\neeholso 000,S Joiby\nTIA2\nFROM COWS\nTH MILK\nNO\nPBST\nMADE WITH\nNoT TREAY\nHITH BST\nGOOD\nSOURCE OF\nCALCIUM\nSEE NUTRITION\nNFORMATION FOR\nSATURATED\nFAT CONTENT\nUD SIGNIFICANT DIFFERENCE HAS BEEN\nSNOWW BETWEEN MILK DERIVED FROM\nTBST-TREATED AND WON- BSTTREATED COWS.\nHOTAHMCJON\nJLIIN\n0 FEOFDN IHT YA\nEST F EET SISC OHO\nRH4 27-636\nSHVE9O AETRA Y\n3U mss2,noitsnatnl foy\nCOEA-Sio-0G8 lisð 10 ga\nNET WT& 0Z (226g)\n20\nCUPS\n---------------\nNutrition Facts\nServing size\n1/4 cup (28g)\nabout 8 servings per container\nAmount per serving\nCaloriees\nTotal Fat 7g\nSaturated Fat 4.5g\nTrans Fat Og\nCholesterol 25mg\nSodium 170mg\nTotal Carbohydrate 1g\nDietary Fiber Og\nTotal Sugars Og\nIncludes Og Added Sugars\nProtein 6g\nVitamin D Omcg 0%\nCalcium 160mg 10%\nPotassium 50mg 2%\nIron Omg 0%\n\"The % Daily Value tels you how much a nutrient in a\nserving of food contributes to a daily diet. 2,000 calories\na day is used for general nutrition advice.\nINGREDIENTS: PASTEURIZED MILK, CHEESE CULTURE, SALT\nENZYMES, POTATO STARCH, TAPIO0CÃ STARCH,. DEXTROSE AND\nCALCIUM SULFATE (ADDED TO PREVENT CAKING), NATAMYCIN\n(A NATURAL MOLD INHIBITOR).\nCONTAINS: MILK.\nDISTRIBUTED BY THE KROGER CO.\nCINCINNATI, OHIO 45202\nFOR BEST QUALITY KEEP REFRIGERATED AND CONSUME\nWITHIN 3 T05 DAYS AFTER OPENING.\nFor More Product Information, Scan UPC\nUsing Your Kroger App or Call 800-632-6900\nOur Brands. Our Guarantee.\nLove It or Your Money Back.\nwww.kroger,com\n•\n90\n% Daily Value*\n9%\n22%\n8%\n7%\n0%\n0%\n0%\nKroger)\nog\nCHEESE\n-NATURAL\nThy This\nRoope!\nCLASSIC\nVEGETARIAN LASAGNA\nINGREDIENTS\n24 oz Jarred\nmarinara sauce\n2C ricotta cheese\nI egg\nI/4 C shredded\nParmesan cheese\ni/4 tsp salt\nI tsp black pepper\n2C shredded whole\nmilk mozzarella\ncheese\n12 lasagna noodles\n(cooked)\nDIRECTIONS\nI Preheat oven to 350°F.\n2. Spray a 13\"x 9\" baking dish with nonstick spray.\n3. Spread 2 tablespoons of marinara on bottom of pan.\n4. In a large mixing bowl blend together ricotta\ncheese, egg, and Parmesan cheese, salt and pepper.\n5. In baking dish place 4 lasagna sheets slightly\noverlapping. Place about |/3 of the mixture on\nnoodles and sprinkle l/2 cup of mozzarella shreds\nand about I/2 cup of marinara. Repeat twice. Place\nlast layer of noodles and finish with the rest of the\nmarinara and top with remaining mozzarella shreds.\n6. Bake for 40 minutes or until hot and bubbly.\nRemove from oven. Let rest for 10 minutes & enjoy!\nRefrigerate any leftovers. Serves 8."`
+        },
+        {
+            role: 'assistant',
+            function_call: {
+                name: 'record_product_details',
+                arguments: JSON.stringify({
+                    product: {
+                        brand: 'Kroger',
+                        name: 'Whole Milk Mozzarella Low Moisture Shredded Cheese',
+                        ingredients: [
+                            { name: 'Pasteurized Milk' },
+                            { name: 'Cheese Culture' },
+                            { name: 'Salt' },
+                            { name: 'Enzymes' },
+                            { name: 'Potato Starch' },
+                            { name: 'Tapioca Starch' },
+                            { name: 'Dextrose and Calcium Sulfate (Added to prevent caking)' },
+                            { name: 'Natamycin (A natural mold inhibitor)' }
+                        ]
+                    }
+                })
+            }
+        }
     ]
 ]
 
