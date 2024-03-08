@@ -5,6 +5,7 @@ import * as Extractor from './extractor.ts'
 import * as Inventory from './inventory.ts'
 import * as Feedback from './feedback.ts'
 import * as History from './history.ts'
+import * as Lists from './lists.ts'
 
 const app = new Application()
 
@@ -39,6 +40,24 @@ router
     })
     .post('/ingredicheck/feedback', async (ctx) => {
         await Feedback.submitFeedback(ctx)
+    })
+    .delete('/ingredicheck/lists/:listId/:listItemId', async (ctx) => {
+        await Lists.deleteListItem(ctx, ctx.params.listId, ctx.params.listItemId)
+    })
+    .delete('/ingredicheck/lists/:listId', async (ctx) => {
+        await Lists.deleteList(ctx, ctx.params.listId)
+    })
+    .post('/ingredicheck/lists/:listId', async (ctx) => {
+        await Lists.addListItem(ctx, ctx.params.listId)
+    })
+    .get('/ingredicheck/lists/:listId', async (ctx) => {
+        await Lists.getListItems(ctx, ctx.params.listId)
+    })
+    .post('/ingredicheck/lists', async (ctx) => {
+        await Lists.createList(ctx)
+    })
+    .get('/ingredicheck/lists', async (ctx) => {
+        await Lists.getLists(ctx)
     })
 
 app.use(router.routes())
