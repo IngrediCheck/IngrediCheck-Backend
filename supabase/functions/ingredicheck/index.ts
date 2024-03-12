@@ -30,7 +30,8 @@ router
         await Inventory.get(ctx, ctx.params.barcode, clientActivityId)
     })
     .get('/ingredicheck/history', async (ctx) => {
-        await History.get(ctx)
+        const searchText = ctx.request.url.searchParams.get("searchText")
+        await History.get(ctx, searchText)
     })
     .post('/ingredicheck/analyze', async (ctx) => {
         await Analyzer.analyze(ctx)
@@ -51,7 +52,8 @@ router
         await Lists.addListItem(ctx, ctx.params.listId)
     })
     .get('/ingredicheck/lists/:listId', async (ctx) => {
-        await Lists.getListItems(ctx, ctx.params.listId)
+        const searchText = ctx.request.url.searchParams.get("searchText")
+        await Lists.getListItems(ctx, ctx.params.listId, searchText)
     })
     .post('/ingredicheck/lists', async (ctx) => {
         await Lists.createList(ctx)

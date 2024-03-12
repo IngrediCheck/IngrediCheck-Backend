@@ -169,7 +169,9 @@ CREATE POLICY user_update_own_log_llmcall ON public.log_llmcall
 
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION get_check_history()
+CREATE OR REPLACE FUNCTION get_check_history(
+    search_query TEXT = null
+)
 RETURNS TABLE (
     created_at TIMESTAMP WITH TIME ZONE,
     client_activity_id UUID,
@@ -220,6 +222,18 @@ BEGIN
             OR
             le.client_activity_id IS NOT NULL
         )
+        AND
+        (
+            search_query IS NULL
+            OR
+            to_tsvector('english', COALESCE(li.name, le.name) || ' ' || COALESCE(li.brand, le.brand) || ' ' || COALESCE(li.ingredients::text, le.ingredients::text)) @@ plainto_tsquery('english', search_query)
+            OR
+            COALESCE(li.name, le.name) ILIKE '%' || search_query || '%'
+            OR
+            COALESCE(li.brand, le.brand) ILIKE '%' || search_query || '%'
+            OR
+            COALESCE(li.ingredients::text, le.ingredients::text) ILIKE '%' || search_query || '%'
+        )
     ORDER BY
         la.created_at DESC;
 END;
@@ -227,7 +241,10 @@ $$ LANGUAGE plpgsql;
 
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION get_list_items(input_list_id uuid)
+CREATE OR REPLACE FUNCTION get_list_items(
+    input_list_id uuid,
+    search_query TEXT = null
+)
 RETURNS TABLE(
     created_at TIMESTAMP WITH TIME ZONE,
     list_id uuid,
@@ -263,6 +280,18 @@ BEGIN
             li.client_activity_id IS NOT NULL
             OR
             le.client_activity_id IS NOT NULL
+        )
+        AND
+        (
+            search_query IS NULL
+            OR
+            to_tsvector('english', COALESCE(li.name, le.name) || ' ' || COALESCE(li.brand, le.brand) || ' ' || COALESCE(li.ingredients::text, le.ingredients::text)) @@ plainto_tsquery('english', search_query)
+            OR
+            COALESCE(li.name, le.name) ILIKE '%' || search_query || '%'
+            OR
+            COALESCE(li.brand, le.brand) ILIKE '%' || search_query || '%'
+            OR
+            COALESCE(li.ingredients::text, le.ingredients::text) ILIKE '%' || search_query || '%'
         )
     ORDER BY
         uli.created_at DESC;

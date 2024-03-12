@@ -37,8 +37,14 @@ export async function addListItem(ctx: Context, listId: string) {
     ctx.response.status = 201
 }
 
-export async function getListItems(ctx: Context, listId: string) {
-    const result = await ctx.state.supabaseClient.rpc('get_list_items', { input_list_id: listId })
+export async function getListItems(ctx: Context, listId: string, searchText: string | null) {
+    const result = await ctx.state.supabaseClient.rpc(
+        'get_list_items',
+        {
+            input_list_id: listId,
+            search_query: searchText
+        }
+    )
     if (result.error) {
         console.log('supabaseClient.rpc(get_list_items) failed: ', result.error)
         ctx.response.status = 500
