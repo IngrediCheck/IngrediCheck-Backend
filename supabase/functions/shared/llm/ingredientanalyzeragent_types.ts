@@ -44,7 +44,7 @@ export const ingredientAnalyzerAgentFunctions: ChatFunction[] = [
                                 type: 'string'
                             }
                         },
-                        required: ['ingredientName', 'safetyRecommendation', 'reasoning']
+                        required: ['ingredientName', 'safetyRecommendation', 'preference', 'reasoning']
                     }
                 }
             },

@@ -12,9 +12,10 @@ enum SafetyRecommendation {
 }
 
 type IngredientRecommendation = {
-    ingredientName: string,
+    ingredientName: string
     safetyRecommendation: SafetyRecommendation
     reasoning: string
+    preference: string
 }
 
 export async function ingredientAnalyzerAgent(
