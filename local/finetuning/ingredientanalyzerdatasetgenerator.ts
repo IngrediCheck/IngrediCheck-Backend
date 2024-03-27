@@ -13,7 +13,7 @@ const trainingData = [
         {
             role: 'user',
             content:
-`My dietary preferences and restrictions:
+                `My dietary preferences and restrictions:
 Flag aspartame and high fructose corn syrup
 No seed oils
 No added sugar 
@@ -44,7 +44,7 @@ Milk, Cream, Sugar, Corn Syrup, Nonfat Milk, High Fructose Corn Syrup, Whey, Str
         {
             role: 'user',
             content:
-`My dietary preferences and restrictions:
+                `My dietary preferences and restrictions:
 No seed oils
 No added sugar 
 No high fructose corn syrup
@@ -77,7 +77,7 @@ potatoes, vegetable oils (canola, sunflower, safflower), honey (cane syrup, hone
         {
             role: 'user',
             content:
-`My dietary preferences and restrictions:
+                `My dietary preferences and restrictions:
 Flag aspartame and high fructose corn syrup
 I cannot eat onion or garlic due to religious reasons
 No seed oils
@@ -106,7 +106,7 @@ Organic Noodles (Organic Wheat Flour, Sea Salt), Soup Packet (Sea Salt, Chinese 
         {
             role: 'user',
             content:
-`My dietary preferences and restrictions:
+                `My dietary preferences and restrictions:
 Flag aspartame and high fructose corn syrup
 No seed oils
 No added sugar 
@@ -126,14 +126,14 @@ Sardines (Sardina Pilchardus), Organic Extra Virgin Olive Oil, Natural Lemon Fla
         },
         {
             role: 'assistant',
-            function_call: { name: "record_not_safe_to_eat", arguments: JSON.stringify({ ingredients:[] }) }
+            function_call: { name: "record_not_safe_to_eat", arguments: JSON.stringify({ ingredients: [] }) }
         }
     ],
     [
         {
             role: 'user',
             content:
-`My dietary preferences and restrictions:
+                `My dietary preferences and restrictions:
 Flag aspartame and high fructose corn syrup
 No seed oils
 No added sugar 
@@ -153,14 +153,14 @@ enriched organic white wheat flour (organic wheat flour, niacin, reduced iron, t
         },
         {
             role: 'assistant',
-            function_call: { name: "record_not_safe_to_eat", arguments: JSON.stringify({ ingredients:[] }) }
+            function_call: { name: "record_not_safe_to_eat", arguments: JSON.stringify({ ingredients: [] }) }
         }
     ],
     [
         {
             role: 'user',
             content:
-`My dietary preferences and restrictions:
+                `My dietary preferences and restrictions:
 No salt
 No beef, pork and animal products
 ---------------------
@@ -188,7 +188,7 @@ made with smiles and enriched wheat flour (flour, niacin, reduced iron, thiamine
         {
             role: 'user',
             content:
-`My dietary preferences and restrictions:
+                `My dietary preferences and restrictions:
 Flag aspartame and high fructose corn syrup
 No seed oils
 No added sugar 
@@ -223,7 +223,7 @@ Organic Masa Flour, Organic Yellow Corn, Expeller Pressed Sunflower Oil and/or O
         {
             role: 'user',
             content:
-`My dietary preferences and restrictions:
+                `My dietary preferences and restrictions:
 No seed oils
 No added sugar 
 No high fructose corn syrup
@@ -253,7 +253,7 @@ Organic Nonfat Dry Milk, Organic Maltodextrin, Organic Potato Starch, Sea Salt, 
         {
             role: 'user',
             content:
-`My dietary preferences and restrictions:
+                `My dietary preferences and restrictions:
 No seed oils
 No added sugar 
 No eggs no gelatin
@@ -282,7 +282,7 @@ Almond Flour, Organic Coconut Sugar, Chocolate Chips (Cane Sugar, Cocoa Liquor, 
         {
             role: 'user',
             content:
-`My dietary preferences and restrictions:
+                `My dietary preferences and restrictions:
 Flag aspartame and high fructose corn syrup
 No seed oils
 No added sugar 
@@ -306,7 +306,7 @@ ENRICHED UNBLEACHED FLOUR (WHEAT FLOUR, NIACIN, REDUCED IRON, THIAMIN MONONITRAT
                 arguments: JSON.stringify({
                     ingredients: [
                         { ingredientName: "SOYBEAN OIL", safetyRecommendation: "DefinitelyUnsafe", preference: "No seed oils", reasoning: "Soybean oil is a type of seed oil." },
-                        { ingredientName: "DEXTROSE", safetyRecommendation: "DefinitelyUnsafe", preference: "No added sugar", reasoning:"Dextrose is a form of added sugar."},
+                        { ingredientName: "DEXTROSE", safetyRecommendation: "DefinitelyUnsafe", preference: "No added sugar", reasoning: "Dextrose is a form of added sugar." },
                     ]
                 })
             }
@@ -316,7 +316,7 @@ ENRICHED UNBLEACHED FLOUR (WHEAT FLOUR, NIACIN, REDUCED IRON, THIAMIN MONONITRAT
         {
             role: 'user',
             content:
-`My dietary preferences and restrictions:
+                `My dietary preferences and restrictions:
 No animal products except eggs and dairy are ok
 Flag aspartame and high fructose corn syrup
 No seed oils
@@ -349,7 +349,7 @@ SUNFLOWER SEEDS, PUMPKIN SEEDS, COCONUT, ALMONDS, PECANS, ERYTHRITOL, BUTTER (CR
         {
             role: 'user',
             content:
-`My dietary preferences and restrictions:
+                `My dietary preferences and restrictions:
 No animal products except eggs and dairy are ok
 No seed oils
 No added sugar 
@@ -396,7 +396,7 @@ salt
         {
             role: 'user',
             content:
-`My dietary preferences and restrictions:
+                `My dietary preferences and restrictions:
 No animal products except eggs and dairy are ok
 No seed oils
 No added sugar 
@@ -426,7 +426,7 @@ stone ground white corn, vegetable oil (sunflower, safflower, canola)
         {
             role: 'user',
             content:
-`My dietary preferences and restrictions:
+                `My dietary preferences and restrictions:
 No seed oils
 No added sugar 
 No eggs no gelatin
@@ -455,7 +455,7 @@ Sour Cream (Cultured Pasteurized Cream), Sharp Cheddar Cheese (Pasteurized Milk,
         {
             role: 'user',
             content:
-`My dietary preferences and restrictions:
+                `My dietary preferences and restrictions:
 No seed oils
 No added sugar 
 No eggs no gelatin
@@ -496,7 +496,7 @@ Soy Lecithin
         {
             role: 'user',
             content:
-`My dietary preferences and restrictions:
+                `My dietary preferences and restrictions:
 No seed oils
 No added sugar 
 No eggs no gelatin
@@ -519,6 +519,394 @@ Peanuts, Almonds, Walnuts, Dark chocolate (sugar, chocolate liquor, cocoa butter
                         { ingredientName: "canola oil", safetyRecommendation: "DefinitelyUnsafe", preference: "No seed oils", reasoning: "Canola Oil is a seed oil." },
                         { ingredientName: "Honey", safetyRecommendation: "DefinitelyUnsafe", preference: "No added sugar", reasoning: "Honey is a form of added sugar." },
                         { ingredientName: "vanilla extract", safetyRecommendation: "DefinitelyUnsafe", preference: "I don’t like vanilla flavoring", reasoning: "self-explanatory" },
+                    ]
+                })
+            }
+        }
+    ],
+    [
+        {
+            role: 'user',
+            content:
+                `My dietary preferences and restrictions:
+No seed oils
+No added sugar 
+A friend recommended to avoid palm oil
+I don’t feel good after eating garlic
+---------------------
+Analyze this product:
+Name: Home made Marinara
+Brand: null
+Ingredients:
+Italian Whole Peeled Tomatoes, Olive Oil, Onions, Salt, Garlic, Basil, Black Pepper, Oregano
+`
+        },
+        {
+            role: 'assistant',
+            function_call: {
+                name: "record_not_safe_to_eat",
+                arguments: JSON.stringify({
+                    ingredients: [
+                        { ingredientName: "Garlic", safetyRecommendation: "DefinitelyUnsafe", preference: "I don’t feel good after eating garlic", reasoning: "self-explanatory" }
+                    ]
+                })
+            }
+        }
+    ],
+    [
+        {
+            role: 'user',
+            content:
+                `My dietary preferences and restrictions:
+I’m vegetarian
+No palm oil
+I can’t stand garlic
+---------------------
+Analyze this product:
+Name: Natural goodness natural goodness
+Brand: CAMPBELL SOUP COMPANY
+Ingredients:
+chicken stock, salt, natural flavoring, chicken fat, yeast extract, water, carrot juice, celery juice, onion, adds a trivial amount of fat
+`
+        },
+        {
+            role: 'assistant',
+            function_call: {
+                name: "record_not_safe_to_eat",
+                arguments: JSON.stringify({
+                    ingredients: [
+                        { ingredientName: "chicken stock", safetyRecommendation: "DefinitelyUnsafe", preference: "I’m vegetarian", reasoning: "self-explanatory" },
+                        { ingredientName: "chicken fat", safetyRecommendation: "DefinitelyUnsafe", preference: "I’m vegetarian", reasoning: "self-explanatory" }
+                    ]
+                })
+            }
+        }
+    ],
+    [
+        {
+            role: 'user',
+            content:
+                `My dietary preferences and restrictions:
+No alcohol 
+No palm oil
+No meat
+---------------------
+Analyze this product:
+Name: Garlic Khakhra
+Brand: OM SURAJ IMPEX
+Ingredients:
+Whole Wheat Flour, Edible Oil, Iodized Salt, Garlic Paste, Green Chilli, Turmeric Powder
+`
+        },
+        {
+            role: 'assistant',
+            function_call: {
+                name: "record_not_safe_to_eat",
+                arguments: JSON.stringify({
+                    ingredients: [
+                        { ingredientName: "Edible Oil", safetyRecommendation: "MaybeUnsafe", preference: "No palm oil", reasoning: "Edible Oil could be Palm Oil." }
+                    ]
+                })
+            }
+        }
+    ],
+    [
+        {
+            role: 'user',
+            content:
+                `My dietary preferences and restrictions:
+I’m vegetarian
+No palm oil
+I can’t stand garlic
+---------------------
+Analyze this product:
+Name: 365 everyday value, organic black forest uncured ham
+Brand: Whole Foods Market, Inc.
+Ingredients:
+pork, water, distilled white vinegar, salt, evaporated cane sugar, molasses, celery powder, spice (cinnamon, clove, capsicum)
+`
+        },
+        {
+            role: 'assistant',
+            function_call: {
+                name: "record_not_safe_to_eat",
+                arguments: JSON.stringify({
+                    ingredients: [
+                        { ingredientName: "pork", safetyRecommendation: "DefinitelyUnsafe", preference: "I’m vegetarian", reasoning: "self-explanatory" }
+                    ]
+                })
+            }
+        }
+    ],
+    [
+        {
+            role: 'user',
+            content:
+                `My dietary preferences and restrictions:
+Dr berg said avoid maltodextrin because it’s glycemic index is higher than 116
+No animal products except eggs and dairy are ok
+Flag aspartame and high fructose corn syrup
+No added sugar 
+A friend recommended to avoid palm oil
+I can’t stand the taste of cardamom
+I don’t feel good after eating garlic
+---------------------
+Analyze this product:
+Name: Peppermint Hot Chocolate
+Brand: Trader Joe's
+Ingredients:
+Bittersweet Chocolate (Sugar, Chocolate Liquor, Cocoa Butter, Natural Vanilla Flavor), Soy Lecithin Emulsifier, Coconut Oil, Nonfat Dry Milk Powder, Cocoa, Maltodextrin (Corn), Natural Peppermint Flavor, Tricalcium Phosphate, Guar Gum, Sodium Caseinate (a Milk Derivative), Mono- and Diglycerides, Potassium Phosphate, Silicon Dioxide, Salt
+`
+        },
+        {
+            role: 'assistant',
+            function_call: {
+                name: "record_not_safe_to_eat",
+                arguments: JSON.stringify({
+                    ingredients: [
+                        { ingredientName: "Sugar", safetyRecommendation: "DefinitelyUnsafe", preference: "No added sugar", reasoning: "self-explanatory" },
+                        { ingredientName: "Maltodextrin (Corn)", safetyRecommendation: "DefinitelyUnsafe", preference: "Dr berg said avoid maltodextrin because it’s glycemic index is higher than 116", reasoning: "self-explanatory" },
+                        { ingredientName: "Mono- and Diglycerides", safetyRecommendation: "MaybeUnsafe", preference: "No animal products except eggs and dairy are ok", reasoning: "Source of the mono- and diglycerides could be animal-based." },
+                    ]
+                })
+            }
+        }
+    ],
+    [
+        {
+            role: 'user',
+            content:
+                `My dietary preferences and restrictions:
+No added sugar
+No seed oils
+No animal products except eggs and dairy are ok
+Flag aspartame and high fructose corn syrup.
+I can’t stand the taste of cardamom
+---------------------
+Analyze this product:
+Name: Sardines
+Brand: I. Epstein & Sons, Inc.
+Ingredients:
+Sardines, olive oil, salt
+`
+        },
+        {
+            role: 'assistant',
+            function_call: {
+                name: "record_not_safe_to_eat",
+                arguments: JSON.stringify({
+                    ingredients: [
+                        { ingredientName: "Sardines", safetyRecommendation: "DefinitelyUnsafe", preference: "No animal products except eggs and dairy are ok", reasoning: "Sardines are Fish, and hence an animal product." }
+                    ]
+                })
+            }
+        }
+    ],
+    [
+        {
+            role: 'user',
+            content:
+                `My dietary preferences and restrictions:
+No added sugar
+No seed oils
+No animal products except eggs and dairy are ok
+A friend recommended to avoid palm oil
+---------------------
+Analyze this product:
+Name: Shrimp wontons with szechuan sauce
+Brand: null
+Ingredients:
+SHRIMP WONTONS: (SHRIMP (FARM RAISED))
+WONTON WRAPPER: (WHEAT FLOUR, WATER, MODIFIED TAPIOCA STARCH, SALT)
+JICAMA: (YAMBEAN)
+NATURAL SEASONING: (SESAME OIL, SUGAR, SALT, WHITE PEPPER)
+POTATO STARCH
+CARROT
+ONION SICHUAN SAUCE: (NATURAL SEASONING, SUGAR)
+SOYBEAN OIL
+SESAME OIL
+VINEGAR
+CHILI
+YEAST EXTRACT
+WATER
+ONION
+SOY SAUCE: (SALT, SOYBEAN, WHEAT, ALCOHOL)
+SPRING ONION
+GARLIC
+SHELLFISH: (SHRIMP)
+SOYBEAN
+WHEAT
+`
+        },
+        {
+            role: 'assistant',
+            function_call: {
+                name: "record_not_safe_to_eat",
+                arguments: JSON.stringify({
+                    ingredients: [
+                        { ingredientName: "SUGAR", safetyRecommendation: "DefinitelyUnsafe", preference: "No added sugar", reasoning: "self-explanatory" },
+                        { ingredientName: "SESAME OIL", safetyRecommendation: "DefinitelyUnsafe", preference: "No seed oils", reasoning: "Sesame Oil is a seed oil." },
+                        { ingredientName: "SOYBEAN OIL", safetyRecommendation: "DefinitelyUnsafe", preference: "No seed oils", reasoning: "Soybean Oil is a seed oil." },
+                        { ingredientName: "SHRIMP", safetyRecommendation: "DefinitelyUnsafe", preference: "No animal products except eggs and dairy are ok", reasoning: "Shrimp is a type of ShellFish, and hence an animal product." }
+                    ]
+                })
+            }
+        }
+    ],
+    [
+        {
+            role: 'user',
+            content:
+`My dietary preferences and restrictions:
+No meat
+No added sugar
+No seed oils
+Dr berg said avoid maltodextrin because it’s glycemic index is higher than 116
+Flag aspartame and high fructose corn syrup.
+A friend recommended to avoid palm oil
+I can’t stand the taste of cardamom
+I don’t feel good after eating garlic
+---------------------
+Analyze this product:
+Name: Maryland style mini crab cakes
+Brand: Whole Foods Market, Inc.
+Ingredients:
+Blue crab, panko breadcrumbs (wheat flour, sugar, yeast, salt), mayonnaise† (canola oil, cage-free egg yolks, water, honey, distilled white vinegar, cage-free eggs, contains less than 2% of sea salt, spice, lemon juice concentrate), green onions, egg whites, lemon juice, seasoning (sea salt, paprika, garlic, sunflower seed oil, paprika oleoresin, celery, allspice, black pepper, mustard seed, bay leaf, cayenne pepper, nutmeg, ginger, cardamom, cinnamon, celery seed, cloves, mace, onion), yellow mustard (apple cider vinegar, water, mustard seed, sea salt, turmeric, paprika, spices)
+`
+        },
+        {
+            role: 'assistant',
+            function_call: {
+                name: "record_not_safe_to_eat",
+                arguments: JSON.stringify({
+                    ingredients: [
+                        { ingredientName: "Blue crab", safetyRecommendation: "DefinitelyUnsafe", preference: "No meat", reasoning: "Blue crab is a type of seafood." },
+                        { ingredientName: "sugar", safetyRecommendation: "DefinitelyUnsafe", preference: "No added sugar", reasoning: "self-explanatory" },
+                        { ingredientName: "canola oil", safetyRecommendation: "DefinitelyUnsafe", preference: "No seed oils", reasoning: "Canola Oil is a seed oil." },
+                        { ingredientName: "sunflower seed oil", safetyRecommendation: "DefinitelyUnsafe", preference: "No seed oils", reasoning: "Sunflower Seed Oil is a seed oil." },
+                        { ingredientName: "cardamom", safetyRecommendation: "DefinitelyUnsafe", preference: "I can’t stand the taste of cardamom", reasoning: "self-explanatory" },
+                        { ingredientName: "garlic", safetyRecommendation: "DefinitelyUnsafe", preference: "I don’t feel good after eating garlic", reasoning: "self-explanatory" }
+                    ]
+                })
+            }
+        }
+    ],
+    [
+        {
+            role: 'user',
+            content:
+`My dietary preferences and restrictions:
+No meat
+No added sugar
+No seed oils
+Dr berg said avoid maltodextrin because it’s glycemic index is higher than 116
+Flag aspartame and high fructose corn syrup.
+A friend recommended to avoid palm oil
+I can’t stand the taste of cardamom
+I don’t feel good after eating garlic
+---------------------
+Analyze this product:
+Name: All Natural Smoked Wild Kippers
+Brand: BAR HARBOR
+Ingredients:
+herring fillets, salt
+`
+        },
+        {
+            role: 'assistant',
+            function_call: {
+                name: "record_not_safe_to_eat",
+                arguments: JSON.stringify({
+                    ingredients: [
+                        { ingredientName: "herring fillets", safetyRecommendation: "DefinitelyUnsafe", preference: "No meat", reasoning: "Herring is a type of fish, and so this is meat." }
+                    ]
+                })
+            }
+        }
+    ],
+    [
+        {
+            role: 'user',
+            content:
+`My dietary preferences and restrictions:
+No meat
+No added sugar
+No seed oils
+Dr berg said avoid maltodextrin because it’s glycemic index is higher than 116
+No animal products except eggs and dairy are ok
+Flag aspartame and high fructose corn syrup.
+A friend recommended to avoid palm oil
+I can’t stand the taste of cardamom
+I don’t feel good after eating garlic
+---------------------
+Analyze this product:
+Name: Sardines
+Brand: I. Epstein & Sons, Inc.
+Ingredients:
+Sardines, olive oil, salt
+`
+        },
+        {
+            role: 'assistant',
+            function_call: {
+                name: "record_not_safe_to_eat",
+                arguments: JSON.stringify({
+                    ingredients: [
+                        { ingredientName: "Sardines", safetyRecommendation: "DefinitelyUnsafe", preference: "No meat", reasoning: "Sardines are a type of fish, and so this is meat." }
+                    ]
+                })
+            }
+        }
+    ],
+    [
+        {
+            role: 'user',
+            content:
+`My dietary preferences and restrictions:
+No added sugar
+No seed oils
+No animal products except eggs and dairy are ok
+A friend recommended to avoid palm oil
+I can’t stand the taste of cardamom
+I don’t feel good after eating garlic
+---------------------
+Analyze this product:
+Name: Shrimp wontons with szechuan sauce
+Brand: null
+Ingredients:
+SHRIMP WONTONS: (SHRIMP (FARM RAISED))
+WONTON WRAPPER: (WHEAT FLOUR, WATER, MODIFIED TAPIOCA STARCH, SALT)
+JICAMA: (YAMBEAN)
+NATURAL SEASONING: (SESAME OIL, SUGAR, SALT, WHITE PEPPER)
+POTATO STARCH
+CARROT
+ONION SICHUAN SAUCE: (NATURAL SEASONING, SUGAR)
+SOYBEAN OIL
+SESAME OIL
+VINEGAR
+CHILI
+YEAST EXTRACT
+WATER
+ONION
+SOY SAUCE: (SALT, SOYBEAN, WHEAT, ALCOHOL)
+SPRING ONION
+GARLIC
+SHELLFISH: (SHRIMP)
+SOYBEAN
+WHEAT
+`
+        },
+        {
+            role: 'assistant',
+            function_call: {
+                name: "record_not_safe_to_eat",
+                arguments: JSON.stringify({
+                    ingredients: [
+                        { ingredientName: "SUGAR", safetyRecommendation: "DefinitelyUnsafe", preference: "No added sugar", reasoning: "self-explanatory" },
+                        { ingredientName: "SESAME OIL", safetyRecommendation: "DefinitelyUnsafe", preference: "No seed oils", reasoning: "Sesame Oil is a seed oil." },
+                        { ingredientName: "SOYBEAN OIL", safetyRecommendation: "DefinitelyUnsafe", preference: "No seed oils", reasoning: "Soybean Oil is a seed oil." },
+                        { ingredientName: "SHRIMP", safetyRecommendation: "DefinitelyUnsafe", preference: "No animal products except eggs and dairy are ok", reasoning: "Shrimp is a type of ShellFish, and hence an animal product." },
+                        { ingredientName: "GARLIC", safetyRecommendation: "DefinitelyUnsafe", preference: "I don’t feel good after eating garlic", reasoning: "self-explanatory" }
                     ]
                 })
             }
