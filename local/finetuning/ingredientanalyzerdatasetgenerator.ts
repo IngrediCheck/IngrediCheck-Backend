@@ -828,6 +828,39 @@ herring fillets, salt
         {
             role: 'user',
             content:
+                `My dietary preferences and restrictions:
+No meat
+No added sugar
+No seed oils
+Dr berg said avoid maltodextrin because it’s glycemic index is higher than 116
+Flag aspartame and high fructose corn syrup.
+A friend recommended to avoid palm oil
+I can’t stand the taste of cardamom
+I don’t feel good after eating garlic
+---------------------
+Analyze this product:
+Name: Skipjack Wild Tuna
+Brand: Wild Planet Foods, Inc.
+Ingredients:
+Skipjack tuna (katsuwonus pelamis), sea salt
+`
+        },
+        {
+            role: 'assistant',
+            function_call: {
+                name: "record_not_safe_to_eat",
+                arguments: JSON.stringify({
+                    ingredients: [
+                        { ingredientName: "Skipjack tuna", safetyRecommendation: "DefinitelyUnsafe", preference: "No meat", reasoning: "Skipjack tuna is a type of fish, and so this is meat." }
+                    ]
+                })
+            }
+        }
+    ],
+    [
+        {
+            role: 'user',
+            content:
 `My dietary preferences and restrictions:
 No meat
 No added sugar
