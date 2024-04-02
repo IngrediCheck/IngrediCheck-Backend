@@ -89,6 +89,28 @@ create policy "Insert for authenticated users" on public.log_inventory
 --------------------------------------------------------------------------------
 
 create table
+    public.inventory_traderjoes (
+        created_at timestamp with time zone not null default now(),
+        id text not null,
+        product_url text not null,
+        name text not null,
+        categories text[],
+        dietary_tags text[],
+        ingredients text,
+        allergens text,
+        images json,
+        constraint inventory_traderjoes_pkey primary key (id)
+    ) tablespace pg_default;
+
+alter table public.inventory_traderjoes enable row level security;
+
+create policy "All authenticated users" on public.inventory_traderjoes
+    for ALL
+    using (true);
+
+--------------------------------------------------------------------------------
+
+create table
     public.log_extract (
         user_id uuid not null,
         client_activity_id uuid,
