@@ -1,6 +1,7 @@
 
 export type Ingredient = {
     name: string
+    note: string
     vegan?: boolean
     vegetarian?: boolean
     ingredients?: Ingredient[]
