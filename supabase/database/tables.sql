@@ -111,6 +111,26 @@ create policy "All authenticated users" on public.inventory_traderjoes
 --------------------------------------------------------------------------------
 
 create table
+    public.inventory_fdc (
+        created_at timestamp with time zone not null default now(),
+        fdc_id text not null,
+        brand_owner text,
+        brand_name text,
+        subbrand_name text,
+        gtin_upc text,
+        ingredients text,
+        constraint inventory_fdc_pkey primary key (fdc_id)
+    ) tablespace pg_default;
+
+alter table public.inventory_fdc enable row level security;
+
+create policy "All authenticated users" on public.inventory_fdc
+    for ALL
+    using (true);
+
+--------------------------------------------------------------------------------
+
+create table
     public.log_extract (
         user_id uuid not null,
         client_activity_id uuid,
