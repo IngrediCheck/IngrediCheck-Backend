@@ -74,6 +74,9 @@ router
     .delete('/ingredicheck/preferencelists/default/:itemId', async (ctx) => {
         await PreferenceList.deleteItem(ctx, +ctx.params.itemId)
     })
+    .post('/ingredicheck/preferencelists/grandfathered', async (ctx) => {
+        await PreferenceList.grandfather(ctx)
+    })
 
 app.use(router.routes())
 app.use(router.allowedMethods())

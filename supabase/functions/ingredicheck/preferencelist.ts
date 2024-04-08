@@ -25,6 +25,29 @@ export async function getItems(ctx: Context) {
     })
 }
 
+export async function grandfather(ctx: Context) {
+    const body = ctx.request.body({ type: "json" })
+    const requestBody = await body.value
+    const userId = await KitchenSink.getUserId(ctx)
+    const entries = requestBody.map((text: string) => {
+        return {
+            user_id: userId,
+            text: text,
+            annotated_text: text
+        }
+    })
+    const result = await ctx.state.supabaseClient
+        .from('dietary_preferences')
+        .insert(entries)
+    if (result.error) {
+        console.log('supabaseClient.from(dietary_preferences).insert() failed: ', result.error)
+        ctx.response.status = 500
+        ctx.response.body = result.error
+        return
+    }
+    ctx.response.status = 201
+}
+
 export async function addItem(ctx: Context) {
     
     const body = ctx.request.body({ type: "form-data" })
