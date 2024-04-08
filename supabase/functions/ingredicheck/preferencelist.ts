@@ -1,5 +1,6 @@
 import { Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 import * as KitchenSink from '../shared/kitchensink.ts'
+import { preferenceValidatorAgent } from '../shared/llm/preferencevalidatoragent.ts'
 
 const MB = 1024 * 1024
 
@@ -56,27 +57,34 @@ export async function addItem(ctx: Context) {
     ctx.state.clientActivityId = formData.fields['clientActivityId']
     const userId = await KitchenSink.getUserId(ctx)
 
-    const result = await ctx.state.supabaseClient
+    const validationResult = await preferenceValidatorAgent(ctx, preferenceText)
+    if (validationResult.result === 'failure') {
+        ctx.response.status = 422
+        ctx.response.body = validationResult
+        return
+    }
+
+    const dbResult = await ctx.state.supabaseClient
         .from('dietary_preferences')
         .insert({
             user_id: userId,
             text: preferenceText,
-            annotated_text: preferenceText // TODO: annotate with AI
+            annotated_text: validationResult.annotatedText
         })
         .select('id, text, annotated_text')
         .single()
-    if (result.error) {
-        console.log('supabaseClient.from(dietary_preferences).insert() failed: ', result.error)
+    if (dbResult.error) {
+        console.log('supabaseClient.from(dietary_preferences).insert() failed: ', dbResult.error)
         ctx.response.status = 500
-        ctx.response.body = result.error
+        ctx.response.body = dbResult.error
         return
     }
     ctx.response.status = 201
     ctx.response.body = {
         result: 'success',
-        id: result.data.id,
-        text: result.data.text,
-        annotatedText: result.data.annotated_text
+        id: dbResult.data.id,
+        text: dbResult.data.text,
+        annotatedText: dbResult.data.annotated_text
     }
 }
 
@@ -87,28 +95,35 @@ export async function updateItem(ctx: Context, id: number) {
     const newPreferenceText = formData.fields['preference']
     ctx.state.clientActivityId = formData.fields['clientActivityId']
 
-    const result = await ctx.state.supabaseClient
+    const validationResult = await preferenceValidatorAgent(ctx, newPreferenceText)
+    if (validationResult.result === 'failure') {
+        ctx.response.status = 422
+        ctx.response.body = validationResult
+        return
+    }
+
+    const dbResult = await ctx.state.supabaseClient
         .from('dietary_preferences')
         .update({
             text: newPreferenceText,
-            annotated_text: newPreferenceText, // TODO: annotate with AI
+            annotated_text: validationResult.annotatedText,
             updated_at: new Date().toISOString()
         })
         .eq('id', id)
         .select('id, text, annotated_text')
         .single()
-    if (result.error) {
-        console.log('supabaseClient.from(dietary_preferences).update() failed: ', result.error)
+    if (dbResult.error) {
+        console.log('supabaseClient.from(dietary_preferences).update() failed: ', dbResult.error)
         ctx.response.status = 500
-        ctx.response.body = result.error
+        ctx.response.body = dbResult.error
         return
     }
     ctx.response.status = 200
     ctx.response.body = {
         result: 'success',
-        id: result.data.id,
-        text: result.data.text,
-        annotatedText: result.data.annotated_text
+        id: dbResult.data.id,
+        text: dbResult.data.text,
+        annotatedText: dbResult.data.annotated_text
     }
 }
 
