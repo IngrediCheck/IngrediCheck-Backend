@@ -48,6 +48,14 @@ const successExamples = [
     {
         input: 'Flag Aspartame, and high fructose corn syrup',
         output: 'Flag **Aspartame**, and **high fructose corn syrup**'
+    },
+    {
+        input: 'no added sugar',
+        output: 'no added **sugar**'
+    },
+    {
+        input: 'Vegatarian. These are ok though: dairy, eggs, fish',
+        output: '**Vegatarian**. These are ok though: **dairy, eggs, fish**'
     }
 ]
 
@@ -114,6 +122,10 @@ const failureExamples = [
         input: 'easy on sugar',
         output: 'I cannot flag ingredients based on quantity yet.'
     },
+    {
+        input: 'I love spicy food',
+        output: 'Please provide a dietary preference that can be mapped to ingredients.'
+    }
 ]
 
 const failureTrainingData = failureExamples.map((example: TrainingExample) => {
