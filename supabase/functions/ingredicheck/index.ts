@@ -6,6 +6,7 @@ import * as Inventory from './inventory.ts'
 import * as Feedback from './feedback.ts'
 import * as History from './history.ts'
 import * as Lists from './lists.ts'
+import * as PreferenceList from './preferencelist.ts'
 
 const app = new Application()
 
@@ -60,6 +61,18 @@ router
     })
     .get('/ingredicheck/lists', async (ctx) => {
         await Lists.getLists(ctx)
+    })
+    .get('/ingredicheck/preferencelists/default', async (ctx) => {
+        await PreferenceList.getItems(ctx)
+    })
+    .post('/ingredicheck/preferencelists/default', async (ctx) => {
+        await PreferenceList.addItem(ctx)
+    })
+    .put('/ingredicheck/preferencelists/default/:itemId', async (ctx) => {
+        await PreferenceList.updateItem(ctx, +ctx.params.itemId)
+    })
+    .delete('/ingredicheck/preferencelists/default/:itemId', async (ctx) => {
+        await PreferenceList.deleteItem(ctx, +ctx.params.itemId)
     })
 
 app.use(router.routes())

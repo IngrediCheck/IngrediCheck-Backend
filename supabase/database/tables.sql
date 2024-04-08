@@ -211,6 +211,25 @@ CREATE POLICY user_update_own_log_llmcall ON public.log_llmcall
 
 --------------------------------------------------------------------------------
 
+CREATE TABLE
+public.dietary_preferences (
+    user_id UUID NOT NULL,
+    created_at timestamp with time zone not null default now(),
+    updated_at timestamp with time zone,
+    deleted_at timestamp with time zone,
+    id SERIAL PRIMARY KEY,
+    text TEXT,
+    annotated_text TEXT
+) tablespace pg_default;
+
+ALTER TABLE public.dietary_preferences ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY user_update_own_dietary_preferences ON public.dietary_preferences
+    FOR ALL
+    USING (auth.uid() = user_id);
+
+--------------------------------------------------------------------------------
+
 CREATE OR REPLACE FUNCTION get_check_history(
     search_query TEXT = null
 )
