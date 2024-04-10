@@ -51,11 +51,15 @@ const successExamples = [
     },
     {
         input: 'no added sugar',
-        output: 'no added **sugar**'
+        output: 'no **added sugar**'
     },
     {
         input: 'Vegatarian. These are ok though: dairy, eggs, fish',
         output: '**Vegatarian**. These are ok though: **dairy, eggs, fish**'
+    },
+    {
+        input: 'No artificial preservatives',
+        output: 'No **artificial preservatives**'
     }
 ]
 
@@ -96,7 +100,7 @@ const failureExamples = [
     },
     {
         input: 'sfdf kd',
-        output: 'This does not make sense. Please rephrase.'
+        output: 'This does not make sense. Please provide a dietary preference.'
     },
     {
         input: 'what is your name?',
@@ -105,6 +109,10 @@ const failureExamples = [
     {
         input: 'how many calories in an egg?',
         output: 'I cannot answer questions. Please provide a dietary preference.'
+    },
+    {
+        input: 'no hugs',
+        output: 'This does not make sense. Please provide a dietary preference.'
     },
     {
         input: 'i prefer diet coke',
