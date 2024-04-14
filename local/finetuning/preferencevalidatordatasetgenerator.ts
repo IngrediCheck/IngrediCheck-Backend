@@ -116,11 +116,19 @@ const failureExamples = [
     },
     {
         input: 'i prefer diet coke',
-        output: 'I cannot identify items yet. Please provide a dietary preference that can be mapped to ingredients.'
+        output: 'I cannot identify brands yet. Please provide a dietary preference that can be mapped to ingredients.'
     },
     {
         input: 'low sodium',
-        output: 'Sodium is a nutrient and not an ingredient.'
+        output: 'I don\'t understand nutrition information yet. Please provide a dietary preference that can be mapped to ingredients.'
+    },
+    {
+        input: 'It should have less than 5 grams of sugar in one serving.',
+        output: 'I don\'t understand nutrition information yet. Please provide a dietary preference that can be mapped to ingredients.'
+    },
+    {
+        input: 'It should be high in dietary fiber.',
+        output: 'I don\'t understand nutrition information yet. Please provide a dietary preference that can be mapped to ingredients.'
     },
     {
         input: 'I want low sugar.',
