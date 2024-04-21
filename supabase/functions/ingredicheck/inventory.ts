@@ -5,6 +5,7 @@ export async function get(ctx: Context, barcode: string, clientActivityId: strin
 
     let result_json: any = {}
     let log_json: any = {
+        start_time: new Date(),
         barcode: barcode,
         data_source: 'openfoodfacts/v3',
         client_activity_id: clientActivityId,
@@ -29,6 +30,8 @@ export async function get(ctx: Context, barcode: string, clientActivityId: strin
         }
         ctx.response.status = 200
     }
+
+    log_json.end_time = new Date()
 
     await ctx.state.supabaseClient.functions.invoke('background/log_inventory', {
         body: log_json,

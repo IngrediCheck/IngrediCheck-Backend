@@ -66,6 +66,8 @@ CREATE POLICY user_update_own_log_infer ON public.log_feedback
 create table
     public.log_inventory (
         created_at timestamp with time zone not null default now(),
+        start_time timestamp with time zone,
+        end_time timestamp with time zone,
         user_id uuid not null,
         client_activity_id uuid,
         barcode text not null,
