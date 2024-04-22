@@ -1,5 +1,6 @@
 import { Application, Router } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 import { createClient } from '@supabase/supabase-js'
+import * as KitchenSink from '../shared/kitchensink.ts'
 import * as Analyzer from './analyzer.ts'
 import * as Extractor from './extractor.ts'
 import * as Inventory from './inventory.ts'
@@ -26,6 +27,25 @@ app.use((ctx, next) => {
 const router = new Router()
 
 router
+    .post('/ingredicheck/deleteme', async (ctx) => {
+        const supabaseClient = createClient(
+            Deno.env.get('SUPABASE_URL') ?? '',
+            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+        )
+        const userId = await KitchenSink.getUserId(ctx)
+        console.log('deleting user: ', userId)
+        const result = await supabaseClient.auth.admin.deleteUser(
+            userId,
+            true
+        )
+        if (result.error) {
+            console.log('supabaseClient.auth.admin.deleteUser() failed: ', result.error)
+            ctx.response.status = 500
+            ctx.response.body = result.error
+            return
+        }
+        ctx.response.status = 204
+    })
     .get('/ingredicheck/inventory/:barcode', async (ctx) => {
         const clientActivityId = ctx.request.url.searchParams.get("clientActivityId")
         await Inventory.get(ctx, ctx.params.barcode, clientActivityId)
