@@ -13,6 +13,44 @@ const trainingData = [
             role: 'user',
             content:
                 `My dietary preferences and restrictions:
+None
+---------------------
+Analyze this product:
+Name: Berry blend strawberries, blueberries & blackberries, berry blend
+Brand: Whole Foods Market, Inc.
+Ingredients:
+strawberries, blueberries, blackberries
+`
+        },
+        {
+            role: 'assistant',
+            function_call: { name: "record_not_safe_to_eat", arguments: JSON.stringify({ ingredients: [] }) }
+        }
+    ],
+    [
+        {
+            role: 'user',
+            content:
+                `My dietary preferences and restrictions:
+None
+---------------------
+Analyze this product:
+Name: Mexican Blend
+Brand: Whole Foods Market, Inc.
+Ingredients:
+Monterey jack cheese (cultured pasteurized milk, salt, microbial enzymes), cheddar cheese (cultured pasteurized milk, salt, microbial enzymes), queso blanco cheese (cultured pasteurized milk, salt, microbial enzymes), asadero cheese (cultured pasteurized milk, salt, microbial enzymes), powdered cellulose
+`
+        },
+        {
+            role: 'assistant',
+            function_call: { name: "record_not_safe_to_eat", arguments: JSON.stringify({ ingredients: [] }) }
+        }
+    ],
+    [
+        {
+            role: 'user',
+            content:
+                `My dietary preferences and restrictions:
 Flag aspartame and high fructose corn syrup
 No seed oils
 No added sugar 
