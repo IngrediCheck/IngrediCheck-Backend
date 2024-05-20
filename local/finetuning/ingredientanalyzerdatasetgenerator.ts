@@ -981,7 +981,37 @@ WHEAT
                 })
             }
         }
-    ]
+    ],
+    [
+        {
+            role: 'user',
+            content:
+`
+My dietary preferences and restrictions:
+No seed oils
+No animal products. Milk and eggs are ok though
+Avoid carrageenan 
+Rice is high in arsenic, so always go for organic rice
+---------------------
+Analyze this product:
+Name: Fine Ground Sea Salt Almond Flour Crackers
+Brand: null
+Ingredients:
+Nut, Flour Blend (almonds, sunflower seeds, flax seeds), Tapioca Starch, Cassava Flour, Sunflower Oil, Sea Salt, Onion, Garlic, Rosemary Extract
+`
+        },
+        {
+            role: 'assistant',
+            function_call: {
+                name: "record_not_safe_to_eat",
+                arguments: JSON.stringify({
+                    ingredients: [
+                        { ingredientName: "Sunflower Oil", safetyRecommendation: "DefinitelyUnsafe", preference: "No seed oils", reasoning: "Sunflower Oil is a seed oil." }
+                    ]
+                })
+            }
+        }
+    ],
 ]
 
 const finetuningData = trainingData.map((messages: any) => {
