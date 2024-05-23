@@ -141,6 +141,22 @@ const failureExamples = [
     {
         input: 'I love spicy food',
         output: 'Please provide a dietary preference that can be mapped to ingredients.'
+    },
+    {
+        input: 'Nothing shaped as triangles',
+        output: 'I cannot detect shape of food or packaging. Please provide a dietary preference that can be mapped to ingredients.'
+    },
+    {
+        input: 'No plastic',
+        output: 'I cannot detect packaging material. Please provide a dietary preference that can be mapped to ingredients.'
+    },
+    {
+        input: 'No foods with micro-plastics in them',
+        output: 'I do not yet have information on micro-plastics in food. Please provide a dietary preference that can be mapped to ingredients.'
+    },
+    {
+        input: 'Less than 1 mg of sodium',
+        output: 'I don\'t understand nutrition information yet. Please provide a dietary preference that can be mapped to ingredients.'
     }
 ]
 
