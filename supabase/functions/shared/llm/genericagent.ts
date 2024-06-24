@@ -7,6 +7,8 @@ export enum ModelName {
     GPT3dot5 = 'gpt-3.5-turbo-0125',
     ExtractorFineTuned = 'ft:gpt-3.5-turbo-1106:personal::8vUeW0QJ',
     IngredientAnalyzerFineTuned = 'ft:gpt-3.5-turbo-0125:personal:ingredientanalyzer:9GyD1GQ5',
+    // IngredientAnalyzerFineTuned = 'mixtral-8x7b-32768',
+    // IngredientAnalyzerFineTuned = 'llama3-70b-8192',
     PreferenceValidatorFineTuned = 'ft:gpt-3.5-turbo-0125:personal:preferencevalidato:9Dyz5Hrd',
     Mistral = 'mistralai/Mistral-7B-Instruct-v0.1',
     Mixtral = 'mistralai/Mixtral-8x7B-Instruct-v0.1'
@@ -74,17 +76,26 @@ export async function genericAgent(
     parentConversationIds: string[]
 ): Promise<ChatMessage[]> {
 
-    const endpoint = modelName.startsWith('mistralai')
-        ? 'https://api.endpoints.anyscale.com/v1/chat/completions'
-        : 'https://api.openai.com/v1/chat/completions'
+    const endpoint =
+        modelName.startsWith('mistralai')
+            ? 'https://api.endpoints.anyscale.com/v1/chat/completions'
+            : modelName.startsWith('mixtral-8x7b-32768')
+                ? 'https://api.groq.com/openai/v1/chat/completions'
+                : 'https://api.openai.com/v1/chat/completions'
 
-    const apiKey = modelName.startsWith('mistralai')
-        ? Deno.env.get("ANYSCALE_API_KEY")
-        : Deno.env.get("OPENAI_API_KEY")
+    const apiKey =
+        modelName.startsWith('mistralai')
+            ? Deno.env.get("ANYSCALE_API_KEY")
+            : modelName.startsWith('mixtral-8x7b-32768')
+                ? Deno.env.get("GROQ_API_KEY")
+                : Deno.env.get("OPENAI_API_KEY")
 
-    const modelProvider = modelName.startsWith('mistralai')
-        ? 'anyscale'
-        : 'openai'
+    const modelProvider =
+        modelName.startsWith('mistralai')
+            ? 'anyscale'
+            : modelName.startsWith('mixtral-8x7b-32768')
+                ? 'groq'
+                : 'openai'
 
     const temperature = 0.0
     const functionCall = 'auto'
