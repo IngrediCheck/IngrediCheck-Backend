@@ -5,11 +5,11 @@ export enum ModelName {
     GPT4 = 'gpt-4-1106-preview',
     GPT4turbo = 'gpt-4-0125-preview',
     GPT3dot5 = 'gpt-3.5-turbo-0125',
-    ExtractorFineTuned = 'ft:gpt-3.5-turbo-1106:personal::8vUeW0QJ',
-    IngredientAnalyzerFineTuned = 'ft:gpt-3.5-turbo-0125:personal:ingredientanalyzer:9GyD1GQ5',
+    ExtractorFineTuned = 'ft:gpt-4o-mini-2024-07-18:personal:extractor:9ob7B1Fq',
+    IngredientAnalyzerFineTuned = 'ft:gpt-4o-mini-2024-07-18:personal:ingredientanalyzer:9ob52Sqn',
     // IngredientAnalyzerFineTuned = 'mixtral-8x7b-32768',
     // IngredientAnalyzerFineTuned = 'llama3-70b-8192',
-    PreferenceValidatorFineTuned = 'ft:gpt-3.5-turbo-0125:personal:preferencevalidato:9Dyz5Hrd',
+    PreferenceValidatorFineTuned = 'ft:gpt-4o-mini-2024-07-18:personal:preferencevalidato:9obfhqlA',
     Mistral = 'mistralai/Mistral-7B-Instruct-v0.1',
     Mixtral = 'mistralai/Mixtral-8x7B-Instruct-v0.1'
 }
