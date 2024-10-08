@@ -126,7 +126,9 @@ export async function genericAgent(
                     temperature: temperature,
                     messages: messages,
                     functions: functions,
-                    function_call: functionCall
+                    function_call: functionCall,
+                    store: true,
+                    metadata: { agent_name: agentName }
                 })
             })
 
