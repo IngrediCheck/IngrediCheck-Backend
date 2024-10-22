@@ -97,8 +97,13 @@ export async function genericAgent(
                 ? 'groq'
                 : 'openai'
 
+    const tools = functions.map((f) => ({
+        type: 'function',
+        function: f
+    }))
+
     const temperature = 0.0
-    const functionCall = 'auto'
+    const tool_choice = 'auto'
 
     const logs: any[] = []
     const messages: ChatMessage[] = []
@@ -125,8 +130,8 @@ export async function genericAgent(
                     model: modelName,
                     temperature: temperature,
                     messages: messages,
-                    functions: functions,
-                    function_call: functionCall,
+                    tools: tools,
+                    tool_choice: tool_choice,
                     store: true,
                     metadata: { agent_name: agentName }
                 })
@@ -141,7 +146,7 @@ export async function genericAgent(
                 startTime,
                 agentName,
                 temperature,
-                functionCall,
+                tool_choice,
                 modelName,
                 modelProvider,
                 newMessages,
@@ -157,7 +162,7 @@ export async function genericAgent(
                 startTime,
                 agentName,
                 temperature,
-                functionCall,
+                tool_choice,
                 modelName,
                 modelProvider,
                 newMessages,
@@ -176,12 +181,12 @@ export async function genericAgent(
         messages.push(assistantMessage)
 
         switch (response_json.choices[0].finish_reason) {
-            case 'function_call': {
+            case 'tool_calls': {
                 startTime = new Date()
 
                 try {
-                    const functionName = assistantMessage.function_call.name
-                    const functionParameters = assistantMessage.function_call.arguments
+                    const functionName = assistantMessage.tool_calls[0].function.name
+                    const functionParameters = assistantMessage.tool_calls[0].function.arguments
                     // console.log(`Calling function ${functionName} with parameters ${functionParameters}`)
                     const functionResult = await functionObject[functionName](JSON.parse(functionParameters))
 
@@ -200,7 +205,7 @@ export async function genericAgent(
                         startTime,
                         agentName,
                         temperature,
-                        functionCall,
+                        tool_choice,
                         modelName,
                         modelProvider,
                         [assistantMessage],
@@ -225,7 +230,7 @@ export async function genericAgent(
                         startTime,
                         agentName,
                         temperature,
-                        functionCall,
+                        tool_choice,
                         modelName,
                         modelProvider,
                         [assistantMessage],
