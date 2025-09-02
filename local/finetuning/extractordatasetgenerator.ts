@@ -1,4 +1,4 @@
-
+#!/usr/bin/env deno run --allow-read --allow-write
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { fromFileUrl } from "https://deno.land/std/path/mod.ts"
