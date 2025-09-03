@@ -30,11 +30,6 @@ export async function grandfather(ctx: Context) {
     const body = ctx.request.body({ type: "json" })
     const requestBody = await body.value
     const userId = await KitchenSink.getUserId(ctx)
-    if (!userId) {
-        ctx.response.status = 401
-        ctx.response.body = { error: 'Unauthorized' }
-        return
-    }
     const entries = requestBody.map((text: string) => {
         return {
             user_id: userId,
@@ -61,15 +56,6 @@ export async function addItem(ctx: Context) {
     const preferenceText = formData.fields['preference']
     ctx.state.clientActivityId = formData.fields['clientActivityId']
     const userId = await KitchenSink.getUserId(ctx)
-
-    console.log('Authorization header:', ctx.request.headers.get('authorization'))
-    console.log('Resolved userId:', userId)
-
-    if (!userId) {
-        ctx.response.status = 401
-        ctx.response.body = { error: 'Unauthorized' }
-        return
-    }
 
     const validationResult = await preferenceValidatorAgent(ctx, preferenceText)
     if (validationResult.result === 'failure') {

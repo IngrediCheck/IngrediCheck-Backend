@@ -6,5 +6,9 @@ export async function getUserId(ctx: Context): Promise<string> {
 	const authHeader = ctx.request.headers.get('authorization') ?? ''
 	const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader
 	const userResponse = await supabaseClient.auth.getUser(token)
-	return userResponse.data.user?.id ?? ''
+	const userId = userResponse.data.user?.id
+	if (!userId) {
+		throw new Error('Unauthorized: No valid user found')
+	}
+	return userId
 }
