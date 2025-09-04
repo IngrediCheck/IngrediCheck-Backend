@@ -1,0 +1,69 @@
+name: Deploy Supabase Edge Functions to PROD
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'supabase/functions/**'
+      - '.github/workflows/deploy-edge-functions.yml'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  deploy:
+    name: Deploy Edge Functions to Supabase
+    runs-on: ubuntu-latest
+    environment: PROD
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+          
+      - name: Verify Supabase CLI installation
+        run: |
+          supabase --version
+          
+      - name: Authenticate with Supabase
+        run: |
+          supabase login
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          
+      - name: Link to Supabase project
+        run: |
+          supabase link --project-ref $SUPABASE_PROJECT_REF
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          
+      - name: Deploy IngrediCheck function
+        run: |
+          echo "Deploying ingredicheck function..."
+          supabase functions deploy ingredicheck --project-ref $SUPABASE_PROJECT_REF
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          
+      - name: Deploy Background function
+        run: |
+          echo "Deploying background function..."
+          supabase functions deploy background --project-ref $SUPABASE_PROJECT_REF
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          
+      - name: Verify deployments
+        run: |
+          echo "Verifying function deployments..."
+          supabase functions list --project-ref $SUPABASE_PROJECT_REF
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          
+      - name: Deployment Summary
+        run: |
+          echo "✅ Successfully deployed edge functions:"
+          echo "  - ingredicheck"
+          echo "  - background"
+          echo ""
+          echo "Functions are now live and ready to receive requests."
