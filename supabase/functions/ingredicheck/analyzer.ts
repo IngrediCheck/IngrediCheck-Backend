@@ -59,8 +59,13 @@ export async function analyze(ctx: Context) {
             }
         }
 
+        // Skip analyzer agent if user has no preferences set
+        const hasValidPreferences = requestBody.userPreferenceText && 
+                                    requestBody.userPreferenceText.trim() !== "" && 
+                                    requestBody.userPreferenceText.trim().toLowerCase() !== "none"
+        
         const ingredientRecommendations =
-            product.ingredients && product.ingredients.length !== 0
+            product.ingredients && product.ingredients.length !== 0 && hasValidPreferences
                 ? await ingredientAnalyzerAgent(ctx, product, requestBody.userPreferenceText)
                 : []
 
