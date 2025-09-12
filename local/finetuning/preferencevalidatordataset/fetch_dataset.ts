@@ -53,6 +53,7 @@ async function fetchPreferenceValidatorDataset() {
 
         let lines = 0;
         let fileContent = "";
+        const seenInputs = new Set<string>(); // For deduplication
 
         // 3. Iterate through logs to find "Output Rows" and match them with inputs.
         for (const log of allLogs) {
@@ -79,6 +80,12 @@ async function fetchPreferenceValidatorDataset() {
                 }
 
                 if (userPrompt && outputString) {
+                    // Deduplicate based on the input prompt
+                    if (seenInputs.has(userPrompt)) {
+                        continue;
+                    }
+                    seenInputs.add(userPrompt);
+
                     const jsonLine = {
                         input: userPrompt,
                         output: outputString,
@@ -92,7 +99,7 @@ async function fetchPreferenceValidatorDataset() {
         }
 
         await Deno.writeTextFile(outputFilePath, fileContent);
-        console.log(`✅ Successfully wrote ${lines} records to ${outputFilePath}`);
+        console.log(`✅ Successfully wrote ${lines} unique records to ${outputFilePath}`);
 
     } catch (e) {
         console.error("An error occurred while fetching data from Supabase.");
