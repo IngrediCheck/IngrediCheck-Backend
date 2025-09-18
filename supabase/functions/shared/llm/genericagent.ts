@@ -1,6 +1,33 @@
 
 import { Context } from "https://deno.land/x/oak@v12.6.0/mod.ts"
 
+function parseGroqStructuredOutput(content: string, functionObject: any): any {
+    // Parse the structured output format
+    const reasoningMatch = content.match(/\[\[ ## reasoning ## \]\]\s*(.*?)(?=\[\[ ## output ## \]\]|$)/s)
+    const outputMatch = content.match(/\[\[ ## output ## \]\]\s*(.*?)(?=\[\[ ## completed ## \]\]|$)/s)
+    
+    if (!outputMatch) {
+        throw new Error('Could not parse structured output')
+    }
+    
+    const output = outputMatch[1].trim()
+    
+    // Check if it's a success or failure
+    if (output.startsWith('report_success(')) {
+        const annotatedPreference = output.match(/report_success\("(.*)"\)/)?.[1]
+        if (annotatedPreference) {
+            return functionObject.report_success({ annotatedPreference })
+        }
+    } else if (output.startsWith('report_failure(')) {
+        const explanation = output.match(/report_failure\("(.*)"\)/)?.[1]
+        if (explanation) {
+            return functionObject.report_failure({ explanation })
+        }
+    }
+    
+    throw new Error('Could not parse report function call')
+}
+
 export enum ModelName {
     GPT4 = 'gpt-4-1106-preview',
     GPT4turbo = 'gpt-4-0125-preview',
@@ -10,6 +37,7 @@ export enum ModelName {
     // IngredientAnalyzerFineTuned = 'mixtral-8x7b-32768',
     // IngredientAnalyzerFineTuned = 'llama3-70b-8192',
     PreferenceValidatorFineTuned = 'ft:gpt-4o-mini-2024-07-18:personal:preferencevalidato:9obfhqlA',
+    PreferenceValidatorGroq = 'openai/gpt-oss-20b',
     Mistral = 'mistralai/Mistral-7B-Instruct-v0.1',
     Mixtral = 'mistralai/Mixtral-8x7B-Instruct-v0.1'
 }
@@ -79,21 +107,21 @@ export async function genericAgent(
     const endpoint =
         modelName.startsWith('mistralai')
             ? 'https://api.endpoints.anyscale.com/v1/chat/completions'
-            : modelName.startsWith('mixtral-8x7b-32768')
+            : modelName.startsWith('mixtral-8x7b-32768') || modelName === ModelName.PreferenceValidatorGroq
                 ? 'https://api.groq.com/openai/v1/chat/completions'
                 : 'https://api.openai.com/v1/chat/completions'
 
     const apiKey =
         modelName.startsWith('mistralai')
             ? Deno.env.get("ANYSCALE_API_KEY")
-            : modelName.startsWith('mixtral-8x7b-32768')
+            : modelName.startsWith('mixtral-8x7b-32768') || modelName === ModelName.PreferenceValidatorGroq
                 ? Deno.env.get("GROQ_API_KEY")
                 : Deno.env.get("OPENAI_API_KEY")
 
     const modelProvider =
         modelName.startsWith('mistralai')
             ? 'anyscale'
-            : modelName.startsWith('mixtral-8x7b-32768')
+            : modelName.startsWith('mixtral-8x7b-32768') || modelName === ModelName.PreferenceValidatorGroq
                 ? 'groq'
                 : 'openai'
 
@@ -103,7 +131,7 @@ export async function genericAgent(
     }))
 
     const temperature = 0.0
-    const tool_choice = 'auto'
+    const tool_choice = modelName === ModelName.PreferenceValidatorGroq ? 'none' : 'auto'
 
     const logs: any[] = []
     const messages: ChatMessage[] = []
@@ -245,6 +273,44 @@ export async function genericAgent(
             case 'length':
             case 'stop':
             default: {
+                // For Groq model, handle structured output parsing
+                if (modelName === ModelName.PreferenceValidatorGroq) {
+                    try {
+                        const content = assistantMessage.content || ''
+                        const result = parseGroqStructuredOutput(content, functionObject)
+                        if (result) {
+                            logs.push(log_llmcall(
+                                ctx,
+                                conversationId,
+                                parentConversationIds,
+                                startTime,
+                                agentName,
+                                temperature,
+                                tool_choice,
+                                modelName,
+                                modelProvider,
+                                [assistantMessage],
+                                [],
+                                result
+                            ))
+                        }
+                    } catch (error) {
+                        logs.push(log_llmcall(
+                            ctx,
+                            conversationId,
+                            parentConversationIds,
+                            startTime,
+                            agentName,
+                            temperature,
+                            tool_choice,
+                            modelName,
+                            modelProvider,
+                            [assistantMessage],
+                            [],
+                            error
+                        ))
+                    }
+                }
                 done = true
             }
         }
