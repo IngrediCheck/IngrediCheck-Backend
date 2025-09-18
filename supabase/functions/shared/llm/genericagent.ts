@@ -153,12 +153,12 @@ export async function genericAgent(
                 temperature: temperature,
                 messages: messages,
                 tools: tools,
-                tool_choice: tool_choice,
-                store: true
+                tool_choice: tool_choice
             }
 
-            // Only add metadata for non-Groq models
+            // Only add store and metadata for non-Groq models
             if (modelName !== ModelName.PreferenceValidatorGroq) {
+                requestBody.store = true
                 requestBody.metadata = { agent_name: agentName }
             }
 
