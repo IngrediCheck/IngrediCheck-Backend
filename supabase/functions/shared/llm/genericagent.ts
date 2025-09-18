@@ -148,21 +148,27 @@ export async function genericAgent(
 
             messages.push(...newMessages)
 
+            const requestBody: any = {
+                model: modelName,
+                temperature: temperature,
+                messages: messages,
+                tools: tools,
+                tool_choice: tool_choice,
+                store: true
+            }
+
+            // Only add metadata for non-Groq models
+            if (modelName !== ModelName.PreferenceValidatorGroq) {
+                requestBody.metadata = { agent_name: agentName }
+            }
+
             response = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${apiKey}`
                 },
-                body: JSON.stringify({
-                    model: modelName,
-                    temperature: temperature,
-                    messages: messages,
-                    tools: tools,
-                    tool_choice: tool_choice,
-                    store: true,
-                    metadata: { agent_name: agentName }
-                })
+                body: JSON.stringify(requestBody)
             })
 
             response_json = await response.json()
