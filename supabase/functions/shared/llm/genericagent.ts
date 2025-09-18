@@ -132,6 +132,9 @@ export async function genericAgent(
 
     const temperature = 0.0
     const tool_choice = modelName === ModelName.PreferenceValidatorGroq ? 'none' : 'auto'
+    
+    // For Groq model, don't include tools at all to prevent tool calling
+    const shouldIncludeTools = modelName !== ModelName.PreferenceValidatorGroq
 
     const logs: any[] = []
     const messages: ChatMessage[] = []
@@ -151,13 +154,13 @@ export async function genericAgent(
             const requestBody: any = {
                 model: modelName,
                 temperature: temperature,
-                messages: messages,
-                tools: tools,
-                tool_choice: tool_choice
+                messages: messages
             }
 
-            // Only add store and metadata for non-Groq models
-            if (modelName !== ModelName.PreferenceValidatorGroq) {
+            // Only add tools and tool_choice for non-Groq models
+            if (shouldIncludeTools) {
+                requestBody.tools = tools
+                requestBody.tool_choice = tool_choice
                 requestBody.store = true
                 requestBody.metadata = { agent_name: agentName }
             }
