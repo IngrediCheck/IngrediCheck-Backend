@@ -1,9 +1,4 @@
-
-interface ChatFunction {
-    name: string
-    description?: string
-    parameters: Record<string, unknown>
-}
+import { ChatFunction } from "./types.ts";
 
 export const preferenceValidatorAgentSystemMessage = `
     You are an expert in food and nutrition. You deeply understand the ingredients in
@@ -16,33 +11,33 @@ export const preferenceValidatorAgentSystemMessage = `
       annotated with bolded food ingredient related keywords. Use markdown to bold text.
     - report_failure - if the preference does not make sense, along with an explanation
       for why it cannot be used to identify undesirable ingredients in a list of ingredients.
-`
+`;
 
 export const preferenceValidatorAgentFunctions: ChatFunction[] = [
-    {
-        name: 'report_success',
-        description: 'Report that the user\'s preference makes sense',
-        parameters: {
-            type: 'object',
-            properties: {
-                annotatedPreference: {
-                    type: 'string'
-                }
-            },
-            required: ['annotatedPreference']
-        }
+  {
+    name: "report_success",
+    description: "Report that the user's preference makes sense",
+    parameters: {
+      type: "object",
+      properties: {
+        annotatedPreference: {
+          type: "string",
+        },
+      },
+      required: ["annotatedPreference"],
     },
-    {
-        name: 'report_failure',
-        description: 'Report that the user\'s preference does not make sense',
-        parameters: {
-            type: 'object',
-            properties: {
-                explanation: {
-                    type: 'string'
-                }
-            },
-            required: ['explanation']
-        }
-    }
-]
+  },
+  {
+    name: "report_failure",
+    description: "Report that the user's preference does not make sense",
+    parameters: {
+      type: "object",
+      properties: {
+        explanation: {
+          type: "string",
+        },
+      },
+      required: ["explanation"],
+    },
+  },
+];

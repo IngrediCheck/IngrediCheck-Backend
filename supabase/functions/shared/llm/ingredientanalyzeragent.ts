@@ -1,16 +1,18 @@
-import { Context } from "https://deno.land/x/oak@v12.6.0/mod.ts"
-import * as DB from '../db.ts'
-import * as GenericAgent from './genericagent.ts'
+import { Context } from "oak";
+import * as DB from "../db.ts";
+import { genericAgent } from "./genericagent.ts";
 import {
-    ingredientAnalyzerAgentFunctions
-} from './ingredientanalyzeragent_types.ts'
+  ingredientAnalyzerAgentFunctions,
+} from "./ingredientanalyzeragent_types.ts";
+import { createGeminiProgram } from "./programs.ts";
+import { ChatMessage } from "./types.ts";
 
 type IngredientRecommendation = {
-    ingredientName: string
-    safetyRecommendation: 'MaybeUnsafe' | 'DefinitelyUnsafe'
-    reasoning: string
-    preference: string
-}
+  ingredientName: string;
+  safetyRecommendation: "MaybeUnsafe" | "DefinitelyUnsafe";
+  reasoning: string;
+  preference: string;
+};
 
 const geminiSystemPrompt = `Your input fields are:
 1. \`dietary_preferences\` (list[str]): List of user's dietary preferences, restrictions, and ingredients to avoid
@@ -402,7 +404,6 @@ User message:
 
 [[ ## product_info ## ]]
 {"name": "Protein Bar", "brand": null, "ingredients": "Whey protein isolate, almonds, cocoa, flavors"}
-
 Respond with the corresponding output fields, starting with the field \`[[ ## reasoning ## ]]\`, then \`[[ ## flagged_ingredients ## ]]\` (must be formatted as a valid Python list[FlaggedIngredient]), and then ending with the marker for \`[[ ## completed ## ]]\`.
 
 
@@ -414,126 +415,207 @@ The user wants to avoid whey. The product ingredients list includes "Whey protei
 [[ ## flagged_ingredients ## ]]
 [{"name": "Whey protein isolate", "safety": "DefinitelyUnsafe", "preference": "Avoid whey"}]
 
-[[ ## completed ## ]]`
+[[ ## completed ## ]]`;
 
 export async function ingredientAnalyzerAgent(
-    ctx: Context,
-    product: DB.Product,
-    userPreferenceText: string)
-    : Promise<IngredientRecommendation[]>
-{
-    console.log('🥗 Starting ingredient analyzer agent...')
-    console.log('📦 Product:', product.name)
-    console.log('🏷️ Brand:', product.brand)
-    console.log('👤 User preferences:', userPreferenceText)
-    console.log('🧪 Ingredients count:', product.ingredients?.length || 0)
-    
-    let ingredientRecommendations: IngredientRecommendation[] = []
+  ctx: Context,
+  product: DB.Product,
+  userPreferenceText: string,
+): Promise<IngredientRecommendation[]> {
+  console.log("🥗 Starting ingredient analyzer agent...");
+  console.log("📦 Product:", product.name);
+  console.log("🏷️ Brand:", product.brand);
+  console.log("👤 User preferences:", userPreferenceText);
+  console.log("🧪 Ingredients count:", product.ingredients?.length || 0);
 
-    async function record_not_safe_to_eat(parameters: { ingredients: IngredientRecommendation[] }): Promise<[any, boolean]> {
-        console.log('🚨 Recording unsafe ingredients...')
-        console.log('📊 Ingredients received:', parameters.ingredients.length)
-        console.log('📋 Ingredients:', parameters.ingredients.map(i => `${i.ingredientName} (${i.safetyRecommendation})`))
+  let ingredientRecommendations: IngredientRecommendation[] = [];
 
-        const ingredients = parameters.ingredients
-        ingredientRecommendations = ingredients
-        console.log('✅ Updated ingredient recommendations:', ingredientRecommendations.length)
-        return [ingredients, false]
+  function record_not_safe_to_eat(
+    parameters: { ingredients: IngredientRecommendation[] },
+  ): [IngredientRecommendation[], boolean] {
+    console.log("🚨 Recording unsafe ingredients...");
+    console.log("📊 Ingredients received:", parameters.ingredients.length);
+    console.log(
+      "📋 Ingredients:",
+      parameters.ingredients.map((i) =>
+        `${i.ingredientName} (${i.safetyRecommendation})`
+      ),
+    );
+
+    const ingredients = parameters.ingredients;
+    ingredientRecommendations = ingredients;
+    console.log(
+      "✅ Updated ingredient recommendations:",
+      ingredientRecommendations.length,
+    );
+    return [ingredients, false];
+  }
+
+  function get_sub_ingredients_list(ingredients: DB.Ingredient[]): string {
+    if (ingredients) {
+      return ingredients.map((i) => i.name).join(", ");
+    } else {
+      return "";
     }
+  }
 
-    function get_sub_ingredients_list(ingredients: DB.Ingredient[]): string {
-        if (ingredients) {
-            return ingredients.map((i) => i.name).join(', ')
+  function get_ingredients_depth(ingredients?: DB.Ingredient[]): number {
+    ingredients = ingredients ?? [];
+    let depth = 0;
+    for (const i of ingredients) {
+      depth = Math.max(depth, get_ingredients_depth(i.ingredients) + 1);
+    }
+    return depth;
+  }
+
+  function get_ingredients_list_depth2(ingredients?: DB.Ingredient[]) {
+    ingredients = ingredients ?? [];
+    return ingredients
+      .map((i) => {
+        if (i.ingredients && i.ingredients.length > 0) {
+          return `${i.name} (${get_sub_ingredients_list(i.ingredients)})`;
         } else {
-            return ''
+          return i.name;
         }
-    }
+      })
+      .join(", ");
+  }
 
-    function get_ingredients_depth(ingredients?: DB.Ingredient[]): number {
-        ingredients = ingredients ?? []
-        let depth = 0
-        for (const i of ingredients) {
-            depth = Math.max(depth, get_ingredients_depth(i.ingredients) + 1)
-        }
-        return depth
-    }
-
-    function get_ingredients_list_depth2(ingredients?: DB.Ingredient[]) {
-        ingredients = ingredients ?? []
-        return ingredients
-            .map((i) => {
-                if (i.ingredients && i.ingredients.length > 0) {
-                    return `${i.name} (${get_sub_ingredients_list(i.ingredients)})`
-                } else {
-                    return i.name
-                }
-            })
-            .join(', ')
-    }
-
-    function get_ingredients_list_depth3(ingredients?: DB.Ingredient[]) {
-        ingredients = ingredients ?? []
-        return ingredients
-            .map((i) => {
-                if (i.ingredients && i.ingredients.length > 0) {
-                    return `${i.name}: (${get_ingredients_list_depth2(i.ingredients)})`
-                } else {
-                    return i.name
-                }
-            })
-            .join('\n')
-    }
-
-    function get_ingredients_list() {
-        if (get_ingredients_depth(product.ingredients) === 3) {
-            return get_ingredients_list_depth3(product.ingredients)
+  function get_ingredients_list_depth3(ingredients?: DB.Ingredient[]) {
+    ingredients = ingredients ?? [];
+    return ingredients
+      .map((i) => {
+        if (i.ingredients && i.ingredients.length > 0) {
+          return `${i.name}: (${get_ingredients_list_depth2(i.ingredients)})`;
         } else {
-            return get_ingredients_list_depth2(product.ingredients)
+          return i.name;
         }
-    }
+      })
+      .join("\n");
+  }
 
-    const functionObject = {
-        record_not_safe_to_eat: record_not_safe_to_eat
+  function get_ingredients_list() {
+    if (get_ingredients_depth(product.ingredients) === 3) {
+      return get_ingredients_list_depth3(product.ingredients);
+    } else {
+      return get_ingredients_list_depth2(product.ingredients);
     }
+  }
 
-    const ingredientsList = get_ingredients_list()
-    console.log('📝 Generated ingredients list:', ingredientsList)
-    
-    const userMessage = `[[ ## dietary_preferences ## ]]
+  const functionObject = {
+    record_not_safe_to_eat,
+  };
+
+  const ingredientsList = get_ingredients_list();
+  console.log("📝 Generated ingredients list:", ingredientsList);
+
+  const userMessage = `[[ ## dietary_preferences ## ]]
 ["${userPreferenceText}"]
 
 [[ ## product_info ## ]]
-{"name": "${product.name}", "brand": "${product.brand || null}", "ingredients": "${ingredientsList}"}`
+{"name": "${product.name}", "brand": "${
+    product.brand || null
+  }", "ingredients": "${ingredientsList}"}`;
 
-    console.log('💬 User message length:', userMessage.length)
-    console.log('📄 User message preview:', userMessage.substring(0, 200) + '...')
+  console.log("💬 User message length:", userMessage.length);
+  console.log(
+    "📄 User message preview:",
+    userMessage.substring(0, 200) + "...",
+  );
 
-    const messages: GenericAgent.ChatMessage[] = [
-        {
-            role: 'system',
-            content: geminiSystemPrompt
-        },
-        {
-            role: 'user',
-            content: userMessage
-        }
-    ]
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: geminiSystemPrompt,
+    },
+    {
+      role: "user",
+      content: userMessage,
+    },
+  ];
 
-    console.log('🤖 Calling genericAgent with Gemini model...')
-    const _ = await GenericAgent.genericAgent(
-        ctx,
-        'ingredientanalyzeragent',
-        messages,
-        ingredientAnalyzerAgentFunctions,
-        GenericAgent.ModelName.IngredientAnalyzerGemini,
-        functionObject,
-        crypto.randomUUID(),
-        []
-    )
+  const program = createGeminiProgram({
+    id: "ingredient-gemini",
+    model: Deno.env.get("INGREDIENT_ANALYZER_MODEL") ?? "gemini-2.5-flash-lite",
+    stopSequences: ["[[ ## completed ## ]]"],
+    safetySettings: [
+      {
+        category: "HARM_CATEGORY_HARASSMENT",
+        threshold: "BLOCK_MEDIUM_AND_ABOVE",
+      },
+      {
+        category: "HARM_CATEGORY_HATE_SPEECH",
+        threshold: "BLOCK_MEDIUM_AND_ABOVE",
+      },
+      {
+        category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        threshold: "BLOCK_MEDIUM_AND_ABOVE",
+      },
+      {
+        category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+        threshold: "BLOCK_MEDIUM_AND_ABOVE",
+      },
+    ],
+    parseFunction(content) {
+      const flaggedMatch = content.match(
+        /\[\[ ## flagged_ingredients ## \]\]\s*(.*?)(?=\[\[ ## completed ## \]\]|$)/s,
+      );
+      if (!flaggedMatch) {
+        record_not_safe_to_eat({
+          ingredients: [],
+        });
+        return;
+      }
+      const raw = flaggedMatch[1].trim();
+      let parsed: Array<{
+        name: string;
+        safety: IngredientRecommendation["safetyRecommendation"];
+        reasoning?: string;
+        preference: string;
+      }> = [];
+      try {
+        parsed = JSON.parse(raw) as Array<{
+          name: string;
+          safety: IngredientRecommendation["safetyRecommendation"];
+          reasoning?: string;
+          preference: string;
+        }>;
+      } catch (_error) {
+        record_not_safe_to_eat({
+          ingredients: [],
+        });
+        return;
+      }
+      const mapped: IngredientRecommendation[] = parsed.map((item) => ({
+        ingredientName: item.name,
+        safetyRecommendation: item.safety,
+        reasoning: item.reasoning ?? "",
+        preference: item.preference,
+      }));
+      record_not_safe_to_eat({
+        ingredients: mapped,
+      });
+    },
+  });
 
-    console.log('🏁 Ingredient analyzer completed')
-    console.log('📊 Final recommendations count:', ingredientRecommendations.length)
-    console.log('📋 Final recommendations:', ingredientRecommendations)
-    
-    return ingredientRecommendations
+  console.log("🤖 Calling genericAgent with Gemini model...");
+  await genericAgent(
+    ctx,
+    program,
+    "ingredientanalyzeragent",
+    messages,
+    ingredientAnalyzerAgentFunctions,
+    functionObject,
+    crypto.randomUUID(),
+    [],
+  );
+
+  console.log("🏁 Ingredient analyzer completed");
+  console.log(
+    "📊 Final recommendations count:",
+    ingredientRecommendations.length,
+  );
+  console.log("📋 Final recommendations:", ingredientRecommendations);
+
+  return ingredientRecommendations;
 }

@@ -1,47 +1,59 @@
-import { Context } from "https://deno.land/x/oak@v12.6.0/mod.ts"
-import * as DB from '../db.ts'
-import * as GenericAgent from './genericagent.ts'
-import { extractorAgentSystemMessage, extractorAgentFunctions } from './extractoragent_types.ts'
+import { Context } from "oak";
+import * as DB from "../db.ts";
+import { genericAgent } from "./genericagent.ts";
+import {
+  extractorAgentFunctions,
+  extractorAgentSystemMessage,
+} from "./extractoragent_types.ts";
+import { createOpenAIProgram } from "./programs.ts";
+import { ChatMessage } from "./types.ts";
 
 export async function extractorAgent(
-    ctx: Context,
-    productImagesOCR: string[])
-    : Promise<DB.Product>
-{
-    let extractedProduct = DB.defaultProduct()
+  ctx: Context,
+  productImagesOCR: string[],
+): Promise<DB.Product> {
+  let extractedProduct = DB.defaultProduct();
 
-    async function record_product_details(parameters: { product: DB.Product }): Promise<[any, boolean]> {
-        extractedProduct = parameters.product
-        return [parameters.product, false]
-    }
+  async function record_product_details(
+    parameters: { product: DB.Product },
+  ): Promise<[any, boolean]> {
+    extractedProduct = parameters.product;
+    return [parameters.product, false];
+  }
 
-    const functionObject = {
-        record_product_details: record_product_details
-    }
+  const functionObject = {
+    record_product_details: record_product_details,
+  };
 
-    const userMessage = productImagesOCR.join('\n---------------\n')
+  const userMessage = productImagesOCR.join("\n---------------\n");
 
-    const messages: GenericAgent.ChatMessage[] = [
-        {
-            role: 'system',
-            content: extractorAgentSystemMessage
-        },
-        {
-            role: 'user',
-            content: userMessage
-        }
-    ]
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: extractorAgentSystemMessage,
+    },
+    {
+      role: "user",
+      content: userMessage,
+    },
+  ];
 
-    const _ = await GenericAgent.genericAgent(
-        ctx,
-        'extractoragent',
-        messages,
-        extractorAgentFunctions,
-        GenericAgent.ModelName.ExtractorFineTuned,
-        functionObject,
-        crypto.randomUUID(),
-        []
-    )
+  const program = createOpenAIProgram({
+    id: "extractor-openai-ft",
+    model: Deno.env.get("EXTRACTOR_MODEL") ??
+      "ft:gpt-4o-mini-2024-07-18:personal:extractor:9ob7B1Fq",
+  });
 
-    return extractedProduct
+  await genericAgent(
+    ctx,
+    program,
+    "extractoragent",
+    messages,
+    extractorAgentFunctions,
+    functionObject,
+    crypto.randomUUID(),
+    [],
+  );
+
+  return extractedProduct;
 }

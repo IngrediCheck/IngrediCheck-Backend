@@ -1,4 +1,3 @@
-
 export const extractorAgentSystemMessage = `
     You are an expert in reading OCR text of food product images. You specialize 
     in extracting name, brand, and list of ingredients from the OCR text
@@ -12,61 +11,57 @@ export const extractorAgentSystemMessage = `
         e.g does it sound like a brand name?
         e.g does it sound like a product name?
         e.g does it sound like an ingredient name?
-`
+`;
 
-interface ChatFunction {
-    name: string
-    description?: string
-    parameters: Record<string, unknown>
-}
+import { ChatFunction } from "./types.ts";
 
 export const extractorAgentFunctions: ChatFunction[] = [
-    {
-        name: 'record_product_details',
-        description: 'Record the product details',
-        parameters: {
-            type: 'object',
-            properties: {
-                product: {
-                    type: 'object',
-                    properties: {
-                        brand: { type: 'string' },
-                        name: { type: 'string' },
+  {
+    name: "record_product_details",
+    description: "Record the product details",
+    parameters: {
+      type: "object",
+      properties: {
+        product: {
+          type: "object",
+          properties: {
+            brand: { type: "string" },
+            name: { type: "string" },
+            ingredients: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  ingredients: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        name: { type: "string" },
                         ingredients: {
-                            type: 'array',
-                            items: {
-                                type: 'object',
-                                properties: {
-                                    name: { type: 'string' },
-                                    ingredients: {
-                                        type: 'array',
-                                        items: {
-                                            type: 'object',
-                                            properties: {
-                                                name: { type: 'string' },
-                                                ingredients: {
-                                                    type: 'array',
-                                                    items: {
-                                                        type: 'object',
-                                                        properties: {
-                                                            name: { type: 'string' },
-                                                        },
-                                                        required: ['name']
-                                                    }
-                                                }
-                                            },
-                                            required: ['name']
-                                        }
-                                    }
-                                },
-                                required: ['name']
-                            }
-                        }
+                          type: "array",
+                          items: {
+                            type: "object",
+                            properties: {
+                              name: { type: "string" },
+                            },
+                            required: ["name"],
+                          },
+                        },
+                      },
+                      required: ["name"],
                     },
-                    required: ['ingredients']
-                }
+                  },
+                },
+                required: ["name"],
+              },
             },
-            required: ['product']
-        }
-    }
-]
+          },
+          required: ["ingredients"],
+        },
+      },
+      required: ["product"],
+    },
+  },
+];

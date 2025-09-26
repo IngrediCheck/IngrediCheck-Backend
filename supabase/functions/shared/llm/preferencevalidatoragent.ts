@@ -1,9 +1,10 @@
-
-import { Context } from "https://deno.land/x/oak@v12.6.0/mod.ts"
-import * as GenericAgent from './genericagent.ts'
+import { Context } from "oak";
+import { genericAgent } from "./genericagent.ts";
 import {
-    preferenceValidatorAgentFunctions
-} from './preferencevalidatoragent_types.ts'
+  preferenceValidatorAgentFunctions,
+} from "./preferencevalidatoragent_types.ts";
+import { createStructuredOutputProgram } from "./programs.ts";
+import { ChatMessage } from "./types.ts";
 
 const groqSystemPrompt = `Your input fields are:
 1. \`input\` (str): User's ingredient preference. Can be in English, Spanish, Portuguese or Italian.
@@ -157,7 +158,7 @@ This is an example of the task, though some input or output fields are not suppl
 I avoid fat
 Assistant message:
 [[ ## reasoning ## ]]
-The user states a clear dietary preference: "I avoid fat." This is a valid restriction that can be mapped to ingredient choices (e.g., avoiding high‑fat foods, oils, and fatty cuts of meat). Therefore, we can acknowledge it as a successful preference.
+The user states a clear dietary preference: "I avoid fat." This is a valid restriction that can be mapped to ingredient choices (e.g., avoiding high-fat foods, oils, and fatty cuts of meat). Therefore, we can acknowledge it as a successful preference.
 [[ ## output ## ]]
 report_success("I avoid **fat**")
 [[ ## completed ## ]]
@@ -191,80 +192,132 @@ Response:
 The phrase "Low in added sugar" is a clear dietary preference that can be mapped to ingredient choices (e.g., avoiding foods with added sugar). Therefore it is a valid preference.
 [[ ## output ## ]]
 report_success("Low added sugar")
-[[ ## completed ## ]]`
+[[ ## completed ## ]]`;
 
 type PreferenceValidationResultSuccess = {
-    result: "success"
-    annotatedText: string
-}
+  result: "success";
+  annotatedText: string;
+};
 
 type PreferenceValidationResultFailure = {
-    result: "failure"
-    explanation: string
-}
+  result: "failure";
+  explanation: string;
+};
 
 type PreferenceValidationResult =
-    PreferenceValidationResultSuccess |
-    PreferenceValidationResultFailure
+  | PreferenceValidationResultSuccess
+  | PreferenceValidationResultFailure;
 
 export async function preferenceValidatorAgent(
-    ctx: Context,
-    userPreferenceText: string)
-    : Promise<PreferenceValidationResult>
-{
-    let result: PreferenceValidationResult = {
-        result: "success",
-        annotatedText: userPreferenceText
-    }
+  ctx: Context,
+  userPreferenceText: string,
+): Promise<PreferenceValidationResult> {
+  let result: PreferenceValidationResult = {
+    result: "success",
+    annotatedText: userPreferenceText,
+  };
 
-    function report_success(parameters: { annotatedPreference: string }): [string, boolean] {
-        result = {
-            result: "success",
-            annotatedText: parameters.annotatedPreference
-        }
-        return [
-            parameters.annotatedPreference,
-            false
-        ]
-    }
+  function report_success(
+    parameters: { annotatedPreference: string },
+  ): [string, boolean] {
+    result = {
+      result: "success",
+      annotatedText: parameters.annotatedPreference,
+    };
+    return [
+      parameters.annotatedPreference,
+      false,
+    ];
+  }
 
-    function report_failure(parameters: { explanation: string }): [string, boolean] {
-        result = {
-            result: "failure",
-            explanation: parameters.explanation
-        }
-        return [
-            parameters.explanation,
-            false
-        ]
-    }
+  function report_failure(
+    parameters: { explanation: string },
+  ): [string, boolean] {
+    result = {
+      result: "failure",
+      explanation: parameters.explanation,
+    };
+    return [
+      parameters.explanation,
+      false,
+    ];
+  }
 
-    const functionObject = {
-        report_success: report_success,
-        report_failure: report_failure
-    }
+  const functionObject = {
+    report_success,
+    report_failure,
+  };
 
-    const messages: GenericAgent.ChatMessage[] = [
-        {
-            role: 'system',
-            content: groqSystemPrompt
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: groqSystemPrompt,
+    },
+    {
+      role: "user",
+      content: userPreferenceText,
+    },
+  ];
+
+  const program = createStructuredOutputProgram({
+    id: "preference-groq",
+    provider: "groq",
+    model: Deno.env.get("PREFERENCE_VALIDATOR_MODEL") ?? "openai/gpt-oss-20b",
+    buildPayload: (_ctx, _conversationId, _parent, conversation) => {
+      const apiKey = Deno.env.get("GROQ_API_KEY");
+      return {
+        endpoint: "https://api.groq.com/openai/v1/chat/completions",
+        init: {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey ?? ""}`,
+          },
+          body: JSON.stringify({
+            model: conversation.agentName,
+            temperature: conversation.temperature,
+            messages: conversation.messages,
+          }),
         },
-        {
-            role: 'user',
-            content: userPreferenceText
-        }
-    ]
+      };
+    },
+    parseFunction: (content, conversation) => {
+      const outputMatch = content.match(
+        /\[\[ ## output ## \]\]\s*(.*?)(?=\[\[ ## completed ## \]\]|$)/s,
+      );
+      if (!outputMatch) {
+        return conversation.functionObject.report_failure({
+          explanation: "Could not parse structured output",
+        });
+      }
+      const output = outputMatch[1].trim();
+      if (output.startsWith("report_success(")) {
+        const annotatedPreference =
+          output.match(/report_success\("(.*)"\)/)?.[1] ?? "";
+        return conversation.functionObject.report_success({
+          annotatedPreference,
+        });
+      }
+      if (output.startsWith("report_failure(")) {
+        const explanation = output.match(/report_failure\("(.*)"\)/)?.[1] ?? "";
+        return conversation.functionObject.report_failure({ explanation });
+      }
+      return conversation.functionObject.report_failure({
+        explanation: "Unknown structured output",
+      });
+    },
+  });
 
-    const _ = await GenericAgent.genericAgent(
-        ctx,
-        'preferenceValidatorAgent',
-        messages,
-        preferenceValidatorAgentFunctions,
-        GenericAgent.ModelName.PreferenceValidatorGroq,
-        functionObject,
-        crypto.randomUUID(),
-        []
-    )
+  await genericAgent(
+    ctx,
+    program,
+    "preferenceValidatorAgent",
+    messages,
+    preferenceValidatorAgentFunctions,
+    functionObject,
+    crypto.randomUUID(),
+    [],
+  );
 
-    return result
+  return result;
 }
