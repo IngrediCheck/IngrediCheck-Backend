@@ -259,10 +259,11 @@ export async function preferenceValidatorAgent(
     },
   ];
 
+  const model = Deno.env.get("PREFERENCE_VALIDATOR_MODEL") ?? "openai/gpt-oss-20b";
   const program = createStructuredOutputProgram({
     id: "preference-groq",
     provider: "groq",
-    model: Deno.env.get("PREFERENCE_VALIDATOR_MODEL") ?? "openai/gpt-oss-20b",
+    model,
     buildPayload: (_ctx, _conversationId, _parent, conversation) => {
       const apiKey = Deno.env.get("GROQ_API_KEY");
       return {
@@ -274,7 +275,7 @@ export async function preferenceValidatorAgent(
             "Authorization": `Bearer ${apiKey ?? ""}`,
           },
           body: JSON.stringify({
-            model: conversation.agentName,
+            model,
             temperature: conversation.temperature,
             messages: conversation.messages,
           }),
