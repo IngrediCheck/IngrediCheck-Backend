@@ -94,11 +94,36 @@ export async function genericAgent(
         break;
       }
 
-      const parsedArgs = args ? JSON.parse(args) : {};
+      let parsedArgs: Record<string, unknown> = {};
+      if (args) {
+        try {
+          const maybeParsed = JSON.parse(args);
+          if (
+            maybeParsed &&
+            typeof maybeParsed === "object" &&
+            !Array.isArray(maybeParsed)
+          ) {
+            parsedArgs = maybeParsed as Record<string, unknown>;
+          }
+        } catch (_error) {
+          // If arguments are not valid JSON, default to empty object to avoid crashing
+        }
+      }
+
       const functionResult = await handler(parsedArgs);
-      const [resultPayload, shouldContinue] = Array.isArray(functionResult)
-        ? functionResult
-        : [functionResult, false];
+
+      let resultPayload: unknown;
+      let shouldContinueFlag = false as boolean;
+
+      if (Array.isArray(functionResult)) {
+        const [payload, continueFlag] = functionResult;
+        resultPayload = payload;
+        shouldContinueFlag = typeof continueFlag === "boolean"
+          ? continueFlag
+          : false;
+      } else {
+        resultPayload = functionResult;
+      }
 
       const functionMessage: ChatMessage = {
         role: "function",
@@ -107,7 +132,7 @@ export async function genericAgent(
       };
 
       messages.push(functionMessage);
-      continueLoop = shouldContinue;
+      continueLoop = shouldContinueFlag;
     } else {
       if (program.finalize) {
         await program.finalize(
