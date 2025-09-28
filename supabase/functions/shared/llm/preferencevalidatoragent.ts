@@ -294,13 +294,14 @@ export async function preferenceValidatorAgent(
       const output = outputMatch[1].trim();
       if (output.startsWith("report_success(")) {
         const annotatedPreference =
-          output.match(/report_success\("(.*)"\)/)?.[1] ?? "";
+          output.match(/^report_success\(\s*(["'])((?:\\.|(?!\1)[\s\S])*?)\1\s*\)\s*$/)?.[2] ?? "";
         return conversation.functionObject.report_success({
           annotatedPreference,
         });
       }
       if (output.startsWith("report_failure(")) {
-        const explanation = output.match(/report_failure\("(.*)"\)/)?.[1] ?? "";
+        const explanation =
+          output.match(/^report_failure\(\s*(["'])((?:\\.|(?!\1)[\s\S])*?)\1\s*\)\s*$/)?.[2] ?? "";
         return conversation.functionObject.report_failure({ explanation });
       }
       return conversation.functionObject.report_failure({
