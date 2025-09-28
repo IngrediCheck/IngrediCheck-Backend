@@ -560,7 +560,7 @@ ${productInfoJson}`;
 
   const program = createGeminiProgram({
     id: "ingredient-gemini",
-    model: getEnv("INGREDIENT_ANALYZER_MODEL") ?? "gemini-1.5-flash",
+    model: getEnv("INGREDIENT_ANALYZER_MODEL") ?? "gemini-2.5-flash-lite",
     stopSequences: ["[[ ## completed ## ]]"],
     safetySettings: [
       {
