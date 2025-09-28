@@ -1,9 +1,4 @@
-
-interface ChatFunction {
-    name: string
-    description?: string
-    parameters: Record<string, unknown>
-}
+import { ChatFunction } from "./types.ts";
 
 export const ingredientAnalyzerAgentSystemMessage = `
     You are an expert in food and nutrition. You deeply understand the ingredients in
@@ -16,39 +11,44 @@ export const ingredientAnalyzerAgentSystemMessage = `
     - Recommendations must be relevant to user's stated preferences. Do not include
     any "FYI" recommendations.
     - Recommendations should only be for ingredients in this product.
-`
+`;
 
 export const ingredientAnalyzerAgentFunctions: ChatFunction[] = [
-    {
-        name: 'record_not_safe_to_eat',
-        description: 'Record the ingredients that are not safe to eat',
-        parameters: {
-            type: 'object',
+  {
+    name: "record_not_safe_to_eat",
+    description: "Record the ingredients that are not safe to eat",
+    parameters: {
+      type: "object",
+      properties: {
+        ingredients: {
+          type: "array",
+          items: {
+            type: "object",
             properties: {
-                ingredients: {
-                    type: 'array',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            ingredientName: {
-                                type: 'string'
-                            },
-                            safetyRecommendation: {
-                                type: 'string',
-                                enum: ['MaybeUnsafe', 'DefinitelyUnsafe']
-                            },
-                            preference: {
-                                type: 'string'
-                            },
-                            reasoning: {
-                                type: 'string'
-                            }
-                        },
-                        required: ['ingredientName', 'safetyRecommendation', 'preference', 'reasoning']
-                    }
-                }
+              ingredientName: {
+                type: "string",
+              },
+              safetyRecommendation: {
+                type: "string",
+                enum: ["MaybeUnsafe", "DefinitelyUnsafe"],
+              },
+              preference: {
+                type: "string",
+              },
+              reasoning: {
+                type: "string",
+              },
             },
-            required: ['ingredients']
-        }
-    }
-]
+            required: [
+              "ingredientName",
+              "safetyRecommendation",
+              "preference",
+              "reasoning",
+            ],
+          },
+        },
+      },
+      required: ["ingredients"],
+    },
+  },
+];

@@ -1,259 +1,162 @@
+import { Context } from "oak";
 
-import { Context } from "https://deno.land/x/oak@v12.6.0/mod.ts"
+import { AgentProgram, ConversationState } from "./programs.ts";
+import { ChatFunction, ChatMessage, FunctionObject } from "./types.ts";
 
-export enum ModelName {
-    GPT4 = 'gpt-4-1106-preview',
-    GPT4turbo = 'gpt-4-0125-preview',
-    GPT3dot5 = 'gpt-3.5-turbo-0125',
-    ExtractorFineTuned = 'ft:gpt-4o-mini-2024-07-18:personal:extractor:9ob7B1Fq',
-    IngredientAnalyzerFineTuned = 'ft:gpt-4o-mini-2024-07-18:personal:ingredientanalyzer:9ob52Sqn',
-    // IngredientAnalyzerFineTuned = 'mixtral-8x7b-32768',
-    // IngredientAnalyzerFineTuned = 'llama3-70b-8192',
-    PreferenceValidatorFineTuned = 'ft:gpt-4o-mini-2024-07-18:personal:preferencevalidato:9obfhqlA',
-    Mistral = 'mistralai/Mistral-7B-Instruct-v0.1',
-    Mixtral = 'mistralai/Mixtral-8x7B-Instruct-v0.1'
-}
-
-export interface ChatFunctionCall {
-    name: string
-    arguments: string // JSON string
-}
-
-export interface ChatMessage {
-    role: 'system' | 'user' | 'assistant' | 'function'
-    content: string | undefined
-    function_call?: ChatFunctionCall
-    name?: string
-}
-
-export interface ChatFunction {
-    name: string
-    description?: string
-    parameters: Record<string, unknown>
-}
-
-function log_llmcall(
-    ctx: Context,
-    conversationId: string,
-    parentConversationIds: string[],
-    startTime: Date,
-    agentName: string,
-    temperature: number,
-    functionCall: string,
-    modelName: ModelName,
-    modelProvider: string,
-    messages: ChatMessage[],
-    functions: ChatFunction[],
-    response_json: any
-) {
-    return {
-        id: crypto.randomUUID(),
-        client_activity_id: ctx.state.clientActivityId,
-        activity_id: ctx.state.activityId,
-        conversation_id: conversationId,
-        parentconversation_ids: parentConversationIds,
-        start_time: startTime,
-        end_time: new Date(),
-        agent_name: agentName,
-        model_provider: modelProvider,
-        model_name: modelName,
-        temperature: temperature,
-        function_call: functionCall,
-        functions: functions.map((f) => f.name),
-        messages: messages,
-        response: response_json,
-    }
+function buildConversationState(
+  agentName: string,
+  temperature: number,
+  messages: ChatMessage[],
+  functions: ConversationState["functions"],
+  functionObject: ConversationState["functionObject"],
+): ConversationState {
+  return {
+    messages,
+    agentName,
+    temperature,
+    functions,
+    functionObject,
+  };
 }
 
 export async function genericAgent(
-    ctx: Context,
-    agentName: string,
-    newMessages: ChatMessage[],
-    functions: ChatFunction[],
-    modelName: ModelName,
-    functionObject: any,
-    conversationId: string,
-    parentConversationIds: string[]
+  ctx: Context,
+  program: AgentProgram,
+  agentName: string,
+  initialMessages: ChatMessage[],
+  functions: ChatFunction[],
+  functionObject: FunctionObject,
+  conversationId: string,
+  parentConversationIds: string[],
 ): Promise<ChatMessage[]> {
+  const temperature = 0.0;
 
-    const endpoint =
-        modelName.startsWith('mistralai')
-            ? 'https://api.endpoints.anyscale.com/v1/chat/completions'
-            : modelName.startsWith('mixtral-8x7b-32768')
-                ? 'https://api.groq.com/openai/v1/chat/completions'
-                : 'https://api.openai.com/v1/chat/completions'
+  const logs: Array<Record<string, unknown>> = [];
+  const messages: ChatMessage[] = [...initialMessages];
 
-    const apiKey =
-        modelName.startsWith('mistralai')
-            ? Deno.env.get("ANYSCALE_API_KEY")
-            : modelName.startsWith('mixtral-8x7b-32768')
-                ? Deno.env.get("GROQ_API_KEY")
-                : Deno.env.get("OPENAI_API_KEY")
+  const conversationState = buildConversationState(
+    agentName,
+    temperature,
+    messages,
+    functions,
+    functionObject,
+  );
 
-    const modelProvider =
-        modelName.startsWith('mistralai')
-            ? 'anyscale'
-            : modelName.startsWith('mixtral-8x7b-32768')
-                ? 'groq'
-                : 'openai'
+  let continueLoop = true;
 
-    const tools = functions.map((f) => ({
-        type: 'function',
-        function: f
-    }))
+  while (continueLoop) {
+    const startTime = new Date();
 
-    const temperature = 0.0
-    const tool_choice = 'auto'
+    const { endpoint, init } = await program.buildPayload(
+      ctx,
+      conversationId,
+      parentConversationIds,
+      conversationState,
+    );
 
-    const logs: any[] = []
-    const messages: ChatMessage[] = []
+    const response = await fetch(endpoint, init);
+    const responseJson = await response.json();
 
-    let done = false
+    const { message: assistantMessage, finishReason } = program
+      .parseAssistantMessage(responseJson);
+    messages.push(assistantMessage);
 
-    while (!done) {
+    logs.push({
+      id: crypto.randomUUID(),
+      client_activity_id: ctx.state.clientActivityId,
+      activity_id: ctx.state.activityId,
+      conversation_id: conversationId,
+      parentconversation_ids: parentConversationIds,
+      start_time: startTime,
+      end_time: new Date(),
+      agent_name: agentName,
+      model_provider: program.provider,
+      model_name: program.model,
+      temperature,
+      function_call: finishReason,
+      functions: functions.map((fn) => fn.name),
+      messages,
+      response: responseJson,
+    });
 
-        let startTime = new Date()
-        let response = new Response()
-        let response_json: any = {}
+    const toolCall = assistantMessage.tool_calls?.[0] ??
+      (assistantMessage.function_call
+        ? { function: assistantMessage.function_call }
+        : undefined);
 
+    if (finishReason === "tool_calls" && toolCall) {
+      const functionName = toolCall.function.name;
+      const args = toolCall.function.arguments;
+      const handler = functionObject[functionName];
+
+      if (!handler) {
+        continueLoop = false;
+        break;
+      }
+
+      let parsedArgs: Record<string, unknown> = {};
+      if (args) {
         try {
-
-            messages.push(...newMessages)
-
-            response = await fetch(endpoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                },
-                body: JSON.stringify({
-                    model: modelName,
-                    temperature: temperature,
-                    messages: messages,
-                    tools: tools,
-                    tool_choice: tool_choice,
-                    store: true,
-                    metadata: { agent_name: agentName }
-                })
-            })
-
-            response_json = await response.json()
-
-            logs.push(log_llmcall(
-                ctx,
-                conversationId,
-                parentConversationIds,
-                startTime,
-                agentName,
-                temperature,
-                tool_choice,
-                modelName,
-                modelProvider,
-                newMessages,
-                functions,
-                response_json
-            ))
-
-        } catch(error) {
-            logs.push(log_llmcall(
-                ctx,
-                conversationId,
-                parentConversationIds,
-                startTime,
-                agentName,
-                temperature,
-                tool_choice,
-                modelName,
-                modelProvider,
-                newMessages,
-                functions,
-                error
-            ))
-            break
+          const maybeParsed = JSON.parse(args);
+          if (
+            maybeParsed &&
+            typeof maybeParsed === "object" &&
+            !Array.isArray(maybeParsed)
+          ) {
+            parsedArgs = maybeParsed as Record<string, unknown>;
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.error("Failed to parse tool call arguments", {
+            functionName,
+            rawArguments: args,
+            error: errorMessage,
+          });
+          // If arguments are not valid JSON, default to empty object to avoid crashing
         }
+      }
 
-        if (response_json.error) {
-            break
-        }
+      const functionResult = await handler(parsedArgs);
 
-        const assistantMessage = response_json.choices[0].message
-        newMessages = [assistantMessage]
-        messages.push(assistantMessage)
+      let resultPayload: unknown;
+      let shouldContinueFlag = false as boolean;
 
-        switch (response_json.choices[0].finish_reason) {
-            case 'tool_calls': {
-                startTime = new Date()
+      if (Array.isArray(functionResult)) {
+        const [payload, continueFlag] = functionResult;
+        resultPayload = payload;
+        shouldContinueFlag = typeof continueFlag === "boolean"
+          ? continueFlag
+          : false;
+      } else {
+        resultPayload = functionResult;
+      }
 
-                try {
-                    const functionName = assistantMessage.tool_calls[0].function.name
-                    const functionParameters = assistantMessage.tool_calls[0].function.arguments
-                    // console.log(`Calling function ${functionName} with parameters ${functionParameters}`)
-                    const functionResult = await functionObject[functionName](JSON.parse(functionParameters))
+      const functionMessage: ChatMessage = {
+        role: "function",
+        name: functionName,
+        content: JSON.stringify(resultPayload),
+      };
 
-                    let actualResult: any
-                    if (Array.isArray(functionResult) && functionResult.length === 2 && typeof functionResult[1] === 'boolean') {
-                        actualResult = functionResult[0]
-                        done = true
-                    } else {
-                        actualResult = functionResult
-                    }
-
-                    logs.push(log_llmcall(
-                        ctx,
-                        conversationId,
-                        parentConversationIds,
-                        startTime,
-                        agentName,
-                        temperature,
-                        tool_choice,
-                        modelName,
-                        modelProvider,
-                        [assistantMessage],
-                        [],
-                        actualResult
-                    ))
-
-                    newMessages = [{
-                        role: 'function',
-                        name: functionName,
-                        content: JSON.stringify(actualResult),
-                        function_call: undefined
-                    }]
-                    messages.push(...newMessages)
-
-                } catch (error) {
-
-                    logs.push(log_llmcall(
-                        ctx,
-                        conversationId,
-                        parentConversationIds,
-                        startTime,
-                        agentName,
-                        temperature,
-                        tool_choice,
-                        modelName,
-                        modelProvider,
-                        [assistantMessage],
-                        [],
-                        error
-                    ))
-                    done = true
-                }
-                break
-            }
-            case 'content_filter':
-            case 'length':
-            case 'stop':
-            default: {
-                done = true
-            }
-        }
+      messages.push(functionMessage);
+      continueLoop = shouldContinueFlag;
+    } else {
+      if (program.finalize) {
+        await program.finalize(
+          ctx,
+          conversationId,
+          parentConversationIds,
+          conversationState,
+          assistantMessage,
+        );
+      }
+      continueLoop = false;
     }
+  }
 
-    ctx.state.supabaseClient.functions.invoke('background/log_llmcalls', {
-        body: logs,
-        method: 'POST'
-    })
+  ctx.state.supabaseClient.functions.invoke("background/log_llmcalls", {
+    body: logs,
+    method: "POST",
+  });
 
-    return messages
+  return conversationState.messages;
 }
