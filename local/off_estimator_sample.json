@@ -1,0 +1,18 @@
+{
+  "total_records": 100000,
+  "projected_records_with_barcode": 100000,
+  "barcode_bytes_total": 1288365,
+  "brand_bytes_total": 1796855,
+  "name_bytes_total": 2689661,
+  "ingredients_bytes_total": 108627317,
+  "images_bytes_total": 0,
+  "nonempty_counts": {
+    "brand": 98819,
+    "name": 99632,
+    "ingredients": 96406,
+    "images": 0
+  },
+  "elapsed_seconds": 53.94886898994446,
+  "projected_payload_bytes_total": 114402198,
+  "avg_payload_bytes_per_projected_row": 1144.02198
+}
