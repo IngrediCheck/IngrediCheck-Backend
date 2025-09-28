@@ -105,7 +105,13 @@ export async function genericAgent(
           ) {
             parsedArgs = maybeParsed as Record<string, unknown>;
           }
-        } catch (_error) {
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.error("Failed to parse tool call arguments", {
+            functionName,
+            rawArguments: args,
+            error: errorMessage,
+          });
           // If arguments are not valid JSON, default to empty object to avoid crashing
         }
       }
