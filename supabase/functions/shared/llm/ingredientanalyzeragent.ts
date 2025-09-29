@@ -7,7 +7,7 @@ import {
 import { createGeminiProgram } from "./programs.ts";
 import { ChatMessage } from "./types.ts";
 
-type IngredientRecommendation = {
+export type IngredientRecommendation = {
   ingredientName: string;
   safetyRecommendation: "MaybeUnsafe" | "DefinitelyUnsafe";
   reasoning: string;
