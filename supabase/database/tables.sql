@@ -1,6 +1,4 @@
 
-<<<<<<< Current (Your changes)
-=======
 --------------------------------------------------------------------------------
 
 create table
@@ -42,7 +40,6 @@ create trigger trg_inventory_cache_updated_at
 before update on public.inventory_cache
 for each row execute function set_inventory_cache_updated_at();
 
->>>>>>> Incoming (Background Agent changes)
 --------------------------------------------------------------------------------
 
 create table
