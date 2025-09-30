@@ -185,7 +185,7 @@ async function* iterLinesFromGzip(url: string): AsyncGenerator<string> {
     console.log(`✅ Download complete! Processed ${lineCount.toLocaleString()} products`);
 }
 
-async function writeJsonl(rows: AsyncIterable<CacheRow>, outPath: string): Promise<{ count: number; totalBytes: number; nonEmpty: { brand: number; name: number; ingredients: number; images: number } }> {
+async function writeJsonl(rows: AsyncIterable<{ row: CacheRow; stats: any }>, outPath: string): Promise<{ count: number; totalBytes: number; nonEmpty: { brand: number; name: number; ingredients: number; images: number }; validationStats: any }> {
     console.log("💾 Writing transformed data to local file...");
     const file = await Deno.open(outPath, { create: true, write: true, truncate: true });
     const encoder = new TextEncoder();
@@ -193,9 +193,10 @@ async function writeJsonl(rows: AsyncIterable<CacheRow>, outPath: string): Promi
     let totalBytes = 0;
     let nonBrand = 0, nonName = 0, nonIng = 0, nonImg = 0;
     let lastProgressTime = Date.now();
+    let lastStats: any = null;
     
     try {
-        for await (const row of rows) {
+        for await (const { row, stats } of rows) {
             count++;
             if (row.brand) nonBrand++;
             if (row.name) nonName++;
@@ -204,33 +205,62 @@ async function writeJsonl(rows: AsyncIterable<CacheRow>, outPath: string): Promi
             const json = JSON.stringify(row);
             totalBytes += encoder.encode(json).byteLength;
             await file.write(encoder.encode(json + "\n"));
+            lastStats = stats;
             
             // Show progress every 25k rows or every 5 seconds
             const now = Date.now();
             if (count % 25000 === 0 || now - lastProgressTime > 5000) {
-                console.log(`📝 Written ${count.toLocaleString()} products to local file...`);
+                const validRate = ((lastStats.validProducts / lastStats.totalLines) * 100).toFixed(1);
+                const invalidRate = (((lastStats.emptyLines + lastStats.jsonParseErrors + lastStats.noBarcode) / lastStats.totalLines) * 100).toFixed(1);
+                console.log(`📝 Written ${count.toLocaleString()} products (${validRate}% valid, ${invalidRate}% invalid)`);
                 lastProgressTime = now;
             }
         }
     } finally {
         file.close();
     }
+    
+    // Final validation statistics
+    if (lastStats) {
+        console.log(`\n📊 Validation Statistics:`);
+        console.log(`  Total lines processed: ${lastStats.totalLines.toLocaleString()}`);
+        console.log(`  Valid products: ${lastStats.validProducts.toLocaleString()} (${((lastStats.validProducts / lastStats.totalLines) * 100).toFixed(1)}%)`);
+        console.log(`  Invalid products: ${(lastStats.emptyLines + lastStats.jsonParseErrors + lastStats.noBarcode).toLocaleString()} (${(((lastStats.emptyLines + lastStats.jsonParseErrors + lastStats.noBarcode) / lastStats.totalLines) * 100).toFixed(1)}%)`);
+        console.log(`    - Empty lines: ${lastStats.emptyLines.toLocaleString()}`);
+        console.log(`    - JSON parse errors: ${lastStats.jsonParseErrors.toLocaleString()}`);
+        console.log(`    - No barcode: ${lastStats.noBarcode.toLocaleString()}`);
+    }
+    
     console.log(`✅ Local file complete! ${count.toLocaleString()} products written`);
-    return { count, totalBytes, nonEmpty: { brand: nonBrand, name: nonName, ingredients: nonIng, images: nonImg } };
+    return { count, totalBytes, nonEmpty: { brand: nonBrand, name: nonName, ingredients: nonIng, images: nonImg }, validationStats: lastStats };
 }
 
-async function* projectRows(lines: AsyncIterable<string>): AsyncGenerator<CacheRow> {
+async function* projectRows(lines: AsyncIterable<string>): AsyncGenerator<{ row: CacheRow; stats: { totalLines: number; emptyLines: number; jsonParseErrors: number; noBarcode: number; validProducts: number } }> {
+    let totalLines = 0;
+    let emptyLines = 0;
+    let jsonParseErrors = 0;
+    let noBarcode = 0;
+    let validProducts = 0;
+    
     for await (const line of lines) {
+        totalLines++;
         const trimmed = line.trim();
-        if (!trimmed) continue;
+        if (!trimmed) {
+            emptyLines++;
+            continue;
+        }
+        
         try {
             const product = JSON.parse(trimmed);
             const row = mapToCacheRow(product);
             if (row && row.barcode) {
-                yield row;
+                validProducts++;
+                yield { row, stats: { totalLines, emptyLines, jsonParseErrors, noBarcode, validProducts } };
+            } else {
+                noBarcode++;
             }
         } catch (_) {
-            // skip invalid lines
+            jsonParseErrors++;
         }
     }
 }
@@ -353,6 +383,18 @@ async function main() {
     console.log(`  name: ${stats.nonEmpty.name}`);
     console.log(`  ingredients: ${stats.nonEmpty.ingredients}`);
     console.log(`  images: ${stats.nonEmpty.images}`);
+    
+    // Show validation summary
+    if (stats.validationStats) {
+        console.log("\n📊 Data Quality Summary:");
+        const validRate = ((stats.validationStats.validProducts / stats.validationStats.totalLines) * 100).toFixed(1);
+        console.log(`  Success rate: ${validRate}% (${stats.validationStats.validProducts.toLocaleString()} valid out of ${stats.validationStats.totalLines.toLocaleString()} total)`);
+        console.log(`  Invalid breakdown:`);
+        console.log(`    - Empty lines: ${stats.validationStats.emptyLines.toLocaleString()}`);
+        console.log(`    - JSON parse errors: ${stats.validationStats.jsonParseErrors.toLocaleString()}`);
+        console.log(`    - No barcode: ${stats.validationStats.noBarcode.toLocaleString()}`);
+    }
+    
     const proceed = await askUploadPermission(stats);
     if (!proceed) {
         console.log("Upload skipped.");
