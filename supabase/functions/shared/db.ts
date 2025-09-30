@@ -22,6 +22,10 @@ export type Product = {
 
 export function defaultProduct(): Product {
     return {
+        barcode: undefined,
+        data_source: undefined,
+        brand: undefined,
+        name: undefined,
         ingredients: [],
         images: [],
     }
