@@ -1,5 +1,6 @@
-// deno run -A local/off_ingest.ts
+// deno run -A --unstable-kv local/off_ingest.ts
 // Environment: Copy .env.template to .env and fill in your values
+// Performance: Use --unstable-kv for better memory management
 
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
 
@@ -45,8 +46,9 @@ type CacheRow = {
 
 const OFF_JSONL_GZ_URL = "https://static.openfoodfacts.org/data/openfoodfacts-products.jsonl.gz";
 const OUTPUT_PATH = "local/off_inventory_cache.jsonl";
-const BATCH_UPLOAD_SIZE = 1000;
-const BATCHES_PER_CONFIRMATION = 5; // Upload 5 batches (5000 rows) before asking for confirmation
+const BATCH_UPLOAD_SIZE = 5000; // Increased from 1000
+const BATCHES_PER_CONFIRMATION = 2; // Upload 2 batches (10k rows) before asking for confirmation
+const PARALLEL_BATCHES = 3; // Process multiple batches in parallel
 
 function mapIngredient(node: any): Ingredient {
     const item: Ingredient = {
@@ -284,6 +286,12 @@ async function askUploadPermission(stats: { count: number; totalBytes: number })
     return !!answer;
 }
 
+async function uploadBatch(supabase: any, batch: any[], batchNumber: number): Promise<void> {
+    const { error } = await supabase.from("inventory_cache").upsert(batch, { onConflict: "barcode" });
+    if (error) throw error;
+    console.log(`✅ Uploaded batch ${batchNumber} (${batch.length} rows)`);
+}
+
 async function uploadJsonlToSupabase(path: string) {
     const url = Deno.env.get("SUPABASE_URL") ?? "";
     const key = Deno.env.get("SUPABASE_SECRET_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -292,13 +300,14 @@ async function uploadJsonlToSupabase(path: string) {
 
     const file = await Deno.open(path, { read: true });
     const decoder = new TextDecoder();
-    const bufSize = 1024 * 1024;
+    const bufSize = 2 * 1024 * 1024; // Increased buffer size
     const buf = new Uint8Array(bufSize);
     let pending: any[] = [];
     let leftover = "";
     let total = 0;
     let batchCount = 0;
     let uploadedBatches = 0;
+    let pendingUploads: Promise<void>[] = [];
     
     try {
         while (true) {
@@ -319,16 +328,27 @@ async function uploadJsonlToSupabase(path: string) {
                     total++;
                     
                     if (pending.length >= BATCH_UPLOAD_SIZE) {
-                        // Upload this batch
-                        const { error } = await supabase.from("inventory_cache").upsert(pending, { onConflict: "barcode" });
-                        if (error) throw error;
-                        
+                        // Start parallel upload
+                        const batchToUpload = [...pending];
                         batchCount++;
+                        const uploadPromise = uploadBatch(supabase, batchToUpload, batchCount);
+                        pendingUploads.push(uploadPromise);
+                        
+                        // Wait for uploads if we have too many pending
+                        if (pendingUploads.length >= PARALLEL_BATCHES) {
+                            await Promise.all(pendingUploads);
+                            pendingUploads = [];
+                        }
+                        
                         uploadedBatches++;
-                        console.log(`✅ Uploaded batch ${batchCount} (${pending.length} rows) - Total: ${total} rows`);
                         
                         // Check if we need confirmation
                         if (uploadedBatches >= BATCHES_PER_CONFIRMATION) {
+                            // Wait for all pending uploads before asking
+                            if (pendingUploads.length > 0) {
+                                await Promise.all(pendingUploads);
+                                pendingUploads = [];
+                            }
                             console.log(`\n📊 Progress: ${total} rows uploaded in ${batchCount} batches`);
                             const continueUpload = confirm(`Continue uploading? (${total} rows uploaded so far) [y/N]`);
                             if (!continueUpload) {
@@ -359,10 +379,14 @@ async function uploadJsonlToSupabase(path: string) {
         
         // Upload final batch if any
         if (pending.length) {
-            const { error } = await supabase.from("inventory_cache").upsert(pending, { onConflict: "barcode" });
-            if (error) throw error;
             batchCount++;
-            console.log(`✅ Uploaded final batch ${batchCount} (${pending.length} rows)`);
+            const uploadPromise = uploadBatch(supabase, pending, batchCount);
+            pendingUploads.push(uploadPromise);
+        }
+        
+        // Wait for all remaining uploads
+        if (pendingUploads.length > 0) {
+            await Promise.all(pendingUploads);
         }
     } finally {
         file.close();
