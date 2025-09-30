@@ -1,8 +1,28 @@
 // deno run -A --import-map=local/import_map.json local/off_ingest.ts
-// Environment: SUPABASE_URL, SUPABASE_SECRET_KEY must be set for upload
-// Note: SUPABASE_SECRET_KEY is the new key type (replaces SUPABASE_SERVICE_ROLE_KEY)
+// Environment: Copy .env.template to .env and fill in your values
 
 import { createClient } from "@supabase/supabase-js";
+
+// Load environment variables from .env file
+async function loadEnv() {
+  try {
+    const envText = await Deno.readTextFile("local/.env");
+    const lines = envText.split("\n");
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith("#")) {
+        const [key, ...valueParts] = trimmed.split("=");
+        if (key && valueParts.length > 0) {
+          const value = valueParts.join("=").trim();
+          Deno.env.set(key.trim(), value);
+        }
+      }
+    }
+  } catch (error) {
+    console.warn("⚠️  Could not load .env file:", error.message);
+    console.warn("   Make sure to copy .env.template to .env and fill in your values");
+  }
+}
 
 type Ingredient = {
     name: string;
@@ -262,6 +282,9 @@ async function uploadJsonlToSupabase(path: string) {
 }
 
 async function main() {
+    // Load environment variables from .env file
+    await loadEnv();
+    
     console.log("Downloading OFF JSONL.gz and streaming transform...");
     const rows = projectRows(iterLinesFromGzip(OFF_JSONL_GZ_URL));
     const stats = await writeJsonl(rows, OUTPUT_PATH);
