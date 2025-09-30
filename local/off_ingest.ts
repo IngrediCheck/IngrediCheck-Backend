@@ -139,12 +139,21 @@ function mapToCacheRow(product: any): CacheRow | null {
 }
 
 async function* iterLinesFromGzip(url: string): AsyncGenerator<string> {
+    console.log("📥 Downloading Open Food Facts data...");
     const res = await fetch(url);
     if (!res.body) throw new Error("No response body from OFF");
+    
+    const contentLength = res.headers.get("content-length");
+    const totalBytes = contentLength ? parseInt(contentLength) : 0;
+    console.log(`📦 File size: ${totalBytes > 0 ? formatBytes(totalBytes) : "unknown"}`);
+    
     const decompressed = res.body.pipeThrough(new DecompressionStream("gzip"));
     const textStream = decompressed.pipeThrough(new TextDecoderStream());
     const reader = textStream.getReader();
     let buf = "";
+    let lineCount = 0;
+    let lastProgressTime = Date.now();
+    
     try {
         while (true) {
             const { value, done } = await reader.read();
@@ -154,23 +163,37 @@ async function* iterLinesFromGzip(url: string): AsyncGenerator<string> {
             while ((idx = buf.indexOf("\n")) !== -1) {
                 const line = buf.slice(0, idx);
                 buf = buf.slice(idx + 1);
+                lineCount++;
+                
+                // Show progress every 50k lines or every 10 seconds
+                const now = Date.now();
+                if (lineCount % 50000 === 0 || now - lastProgressTime > 10000) {
+                    console.log(`📊 Processed ${lineCount.toLocaleString()} products...`);
+                    lastProgressTime = now;
+                }
+                
                 yield line;
             }
         }
         if (buf.length > 0) {
+            lineCount++;
             yield buf;
         }
     } finally {
         reader.releaseLock();
     }
+    console.log(`✅ Download complete! Processed ${lineCount.toLocaleString()} products`);
 }
 
 async function writeJsonl(rows: AsyncIterable<CacheRow>, outPath: string): Promise<{ count: number; totalBytes: number; nonEmpty: { brand: number; name: number; ingredients: number; images: number } }> {
+    console.log("💾 Writing transformed data to local file...");
     const file = await Deno.open(outPath, { create: true, write: true, truncate: true });
     const encoder = new TextEncoder();
     let count = 0;
     let totalBytes = 0;
     let nonBrand = 0, nonName = 0, nonIng = 0, nonImg = 0;
+    let lastProgressTime = Date.now();
+    
     try {
         for await (const row of rows) {
             count++;
@@ -181,10 +204,18 @@ async function writeJsonl(rows: AsyncIterable<CacheRow>, outPath: string): Promi
             const json = JSON.stringify(row);
             totalBytes += encoder.encode(json).byteLength;
             await file.write(encoder.encode(json + "\n"));
+            
+            // Show progress every 25k rows or every 5 seconds
+            const now = Date.now();
+            if (count % 25000 === 0 || now - lastProgressTime > 5000) {
+                console.log(`📝 Written ${count.toLocaleString()} products to local file...`);
+                lastProgressTime = now;
+            }
         }
     } finally {
         file.close();
     }
+    console.log(`✅ Local file complete! ${count.toLocaleString()} products written`);
     return { count, totalBytes, nonEmpty: { brand: nonBrand, name: nonName, ingredients: nonIng, images: nonImg } };
 }
 
