@@ -45,7 +45,8 @@ type CacheRow = {
 
 const OFF_JSONL_GZ_URL = "https://static.openfoodfacts.org/data/openfoodfacts-products.jsonl.gz";
 const OUTPUT_PATH = "local/off_inventory_cache.jsonl";
-const BATCH_UPLOAD_SIZE = 500;
+const BATCH_UPLOAD_SIZE = 1000;
+const BATCHES_PER_CONFIRMATION = 5; // Upload 5 batches (5000 rows) before asking for confirmation
 
 function mapIngredient(node: any): Ingredient {
     const item: Ingredient = {
@@ -235,6 +236,9 @@ async function uploadJsonlToSupabase(path: string) {
     let pending: any[] = [];
     let leftover = "";
     let total = 0;
+    let batchCount = 0;
+    let uploadedBatches = 0;
+    
     try {
         while (true) {
             const read = await file.read(buf);
@@ -252,17 +256,37 @@ async function uploadJsonlToSupabase(path: string) {
                     row.last_refreshed_at = new Date().toISOString();
                     pending.push(row);
                     total++;
+                    
                     if (pending.length >= BATCH_UPLOAD_SIZE) {
+                        // Upload this batch
                         const { error } = await supabase.from("inventory_cache").upsert(pending, { onConflict: "barcode" });
                         if (error) throw error;
+                        
+                        batchCount++;
+                        uploadedBatches++;
+                        console.log(`✅ Uploaded batch ${batchCount} (${pending.length} rows) - Total: ${total} rows`);
+                        
+                        // Check if we need confirmation
+                        if (uploadedBatches >= BATCHES_PER_CONFIRMATION) {
+                            console.log(`\n📊 Progress: ${total} rows uploaded in ${batchCount} batches`);
+                            const continueUpload = confirm(`Continue uploading? (${total} rows uploaded so far) [y/N]`);
+                            if (!continueUpload) {
+                                console.log("❌ Upload cancelled by user");
+                                return;
+                            }
+                            uploadedBatches = 0; // Reset counter
+                        }
+                        
                         pending = [];
                     }
                 } catch (_) {
-                    // skip
+                    // skip invalid JSON
                 }
             }
             leftover = data;
         }
+        
+        // Handle remaining data
         if (leftover.trim()) {
             try {
                 const row = JSON.parse(leftover.trim());
@@ -271,14 +295,19 @@ async function uploadJsonlToSupabase(path: string) {
                 total++;
             } catch (_) {}
         }
+        
+        // Upload final batch if any
         if (pending.length) {
             const { error } = await supabase.from("inventory_cache").upsert(pending, { onConflict: "barcode" });
             if (error) throw error;
+            batchCount++;
+            console.log(`✅ Uploaded final batch ${batchCount} (${pending.length} rows)`);
         }
     } finally {
         file.close();
     }
-    console.log(`Uploaded/Upserted ${total} rows to inventory_cache`);
+    
+    console.log(`\n🎉 Upload complete! Total: ${total} rows uploaded in ${batchCount} batches`);
 }
 
 async function main() {
