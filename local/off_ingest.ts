@@ -1,7 +1,7 @@
-// deno run -A --import-map=local/import_map.json local/off_ingest.ts
+// deno run -A local/off_ingest.ts
 // Environment: Copy .env.template to .env and fill in your values
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "npm:@supabase/supabase-js@2.39.3";
 
 // Load environment variables from .env file
 async function loadEnv() {
