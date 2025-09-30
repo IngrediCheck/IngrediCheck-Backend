@@ -1,4 +1,48 @@
 
+<<<<<<< Current (Your changes)
+=======
+--------------------------------------------------------------------------------
+
+create table
+    public.inventory_cache (
+        created_at timestamp with time zone not null default now(),
+        updated_at timestamp with time zone not null default now(),
+        last_refreshed_at timestamp with time zone,
+        barcode text not null,
+        data_source text not null default 'openfoodfacts/v3',
+        name text,
+        brand text,
+        ingredients jsonb not null default '[]'::jsonb,
+        images jsonb not null default '[]'::jsonb,
+        off_last_modified_t bigint,
+        etag text,
+        constraint inventory_cache_pkey primary key (barcode)
+    ) tablespace pg_default;
+
+alter table public.inventory_cache enable row level security;
+
+create policy "Select for all authenticated users" on public.inventory_cache
+    for select
+    using (true);
+
+create policy "Write for service role only" on public.inventory_cache
+    for ALL
+    using (auth.role() = 'service_role')
+    with check (auth.role() = 'service_role');
+
+create or replace function set_inventory_cache_updated_at()
+returns trigger as $$
+begin
+    new.updated_at = now();
+    return new;
+end;
+$$ language plpgsql;
+
+create trigger trg_inventory_cache_updated_at
+before update on public.inventory_cache
+for each row execute function set_inventory_cache_updated_at();
+
+>>>>>>> Incoming (Background Agent changes)
 --------------------------------------------------------------------------------
 
 create table
