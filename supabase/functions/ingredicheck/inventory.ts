@@ -24,17 +24,52 @@ export async function getProductFromCache(
 
   // Query inventory_cache if barcode is provided
   if (barcode !== undefined) {
+    // Try to match barcodes with or without leading zeros
+    // Only pad UPWARD to avoid false matches between different barcode types
+    const variants = [barcode]; // Always include original
+    const len = barcode.length;
+    
+    if (len <= 8) {
+      // EAN-8 format (5% of inventory) - only pad to 8
+      variants.push(barcode.padStart(8, '0'));
+    } else if (len <= 12) {
+      // UPC-A format - pad to 12, 13, 14
+      variants.push(barcode.padStart(12, '0'));
+      variants.push(barcode.padStart(13, '0')); // UPC-A → EAN-13 conversion
+      variants.push(barcode.padStart(14, '0'));
+    } else if (len === 13) {
+      // EAN-13 format (93% of inventory) - pad to 13, 14
+      variants.push(barcode.padStart(13, '0'));
+      variants.push(barcode.padStart(14, '0'));
+    } else {
+      // 14+ digits - only pad to 14
+      variants.push(barcode.padStart(14, '0'));
+    }
+    
+    // Remove duplicates and create OR condition
+    const uniqueVariants = [...new Set(variants)];
+    const orCondition = uniqueVariants.map(v => `barcode.eq.${v}`).join(',');
+    
     const result = await supabaseClient
       .from("inventory_cache")
       .select()
-      .eq("barcode", barcode)
-      .single();
+      .or(orCondition)
+      .limit(1)
+      .maybeSingle();
 
     if (result.error) {
       return {
         status: 404,
         product: null,
         error: result.error.message ?? "Product not found in cache.",
+      };
+    }
+
+    if (!result.data) {
+      return {
+        status: 404,
+        product: null,
+        error: "Product not found in cache.",
       };
     }
 

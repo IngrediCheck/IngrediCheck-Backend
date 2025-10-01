@@ -40,6 +40,58 @@ create trigger trg_inventory_cache_updated_at
 before update on public.inventory_cache
 for each row execute function set_inventory_cache_updated_at();
 
+-- Function to match barcodes with or without leading zeros
+-- Only pads UPWARD to avoid false matches between different barcode types
+-- Based on inventory stats: 93% are 13-digit, 5% are 8-digit
+-- Examples: "884912373946" (12) matches "0884912373946" (13) ✓
+--           "12345678" (8) does NOT match "0000012345678" (13) ✗
+create or replace function barcode_matches(barcode1 text, barcode2 text)
+returns boolean as $$
+declare
+    len1 int;
+    len2 int;
+    min_len int;
+begin
+    if barcode1 is null or barcode2 is null then
+        return false;
+    end if;
+    
+    -- Direct match (fastest check)
+    if barcode1 = barcode2 then
+        return true;
+    end if;
+    
+    len1 := length(barcode1);
+    len2 := length(barcode2);
+    min_len := least(len1, len2);
+    
+    -- Only pad to lengths equal to or greater than the shorter barcode
+    -- This prevents 8-digit codes from matching unrelated 13-digit codes
+    
+    -- Try 8 digits (EAN-8) only if shortest is <= 8
+    if min_len <= 8 and lpad(barcode1, 8, '0') = lpad(barcode2, 8, '0') then
+        return true;
+    end if;
+    
+    -- Try 12 digits (UPC-A) only if shortest is <= 12
+    if min_len <= 12 and lpad(barcode1, 12, '0') = lpad(barcode2, 12, '0') then
+        return true;
+    end if;
+    
+    -- Try 13 digits (EAN-13) only if shortest is <= 13
+    if min_len <= 13 and lpad(barcode1, 13, '0') = lpad(barcode2, 13, '0') then
+        return true;
+    end if;
+    
+    -- Try 14 digits (ITF-14) only if shortest is <= 14
+    if min_len <= 14 and lpad(barcode1, 14, '0') = lpad(barcode2, 14, '0') then
+        return true;
+    end if;
+    
+    return false;
+end;
+$$ language plpgsql immutable;
+
 --------------------------------------------------------------------------------
 
 create table
@@ -300,7 +352,7 @@ BEGIN
         LEFT JOIN public.log_extract le 
             ON la.client_activity_id = le.client_activity_id 
         LEFT JOIN public.inventory_cache ic
-            ON le.barcode = ic.barcode
+            ON barcode_matches(le.barcode, ic.barcode)
         LEFT JOIN public.log_feedback lf
             ON la.client_activity_id = lf.client_activity_id
         WHERE
@@ -360,7 +412,7 @@ BEGIN
     FROM
         public.user_list_items uli
         LEFT JOIN public.log_extract le ON uli.list_item_id = le.client_activity_id
-        LEFT JOIN public.inventory_cache ic ON le.barcode = ic.barcode
+        LEFT JOIN public.inventory_cache ic ON barcode_matches(le.barcode, ic.barcode)
     WHERE
         uli.list_id = input_list_id
         AND
