@@ -1,2 +1,3 @@
 supabase-service.json
 datasets/
+off_inventory_cache.jsonl
