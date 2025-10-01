@@ -46,6 +46,7 @@ router
         }
         ctx.response.status = 204
     })
+    .get('/ingredicheck/inventory/:barcode/analyze-stream', Analyzer.streamInventoryAndAnalysis)
     .get('/ingredicheck/inventory/:barcode', async (ctx) => {
         const clientActivityId = ctx.request.url.searchParams.get("clientActivityId")
         await Inventory.get(ctx, ctx.params.barcode, clientActivityId)
