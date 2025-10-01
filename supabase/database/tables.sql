@@ -105,33 +105,6 @@ CREATE POLICY user_update_own_log_infer ON public.log_feedback
 --------------------------------------------------------------------------------
 
 create table
-    public.log_inventory (
-        created_at timestamp with time zone not null default now(),
-        start_time timestamp with time zone,
-        end_time timestamp with time zone,
-        user_id uuid not null,
-        client_activity_id uuid,
-        barcode text not null,
-        data_source text not null,
-        name text,
-        brand text,
-        ingredients json,
-        images json
-    ) tablespace pg_default;
-
-alter table public.log_inventory enable row level security;
-
-create policy "Select for all authenticated users" on public.log_inventory
-    for select
-    using (true);
-
-create policy "Insert for authenticated users" on public.log_inventory
-    for insert
-    with check (auth.uid() = user_id);
-
---------------------------------------------------------------------------------
-
-create table
     public.inventory_traderjoes (
         created_at timestamp with time zone not null default now(),
         id text not null,
@@ -305,12 +278,12 @@ BEGIN
         SELECT DISTINCT ON (barcode, name, brand)
             la.created_at,
             la.client_activity_id,
-            COALESCE(li.barcode, le.barcode) AS barcode,
-            COALESCE(li.name, le.name) AS name,
-            COALESCE(li.brand, le.brand) AS brand,
-            COALESCE(li.ingredients, le.ingredients) AS ingredients,
+            COALESCE(le.barcode, ic.barcode) AS barcode,
+            COALESCE(ic.name, le.name) AS name,
+            COALESCE(ic.brand, le.brand) AS brand,
+            COALESCE(ic.ingredients::json, le.ingredients) AS ingredients,
             COALESCE(
-                li.images,
+                ic.images::json,
                 (SELECT json_agg(json_build_object('imageFileHash', text_val)) FROM unnest(le.images) AS dt(text_val))
             ) AS images,
             la.response_body AS ingredient_recommendations,
@@ -324,31 +297,27 @@ BEGIN
             ) AS favorited
         FROM
             public.log_analyzebarcode la
-        LEFT JOIN public.log_inventory li 
-            ON la.client_activity_id = li.client_activity_id 
         LEFT JOIN public.log_extract le 
             ON la.client_activity_id = le.client_activity_id 
+        LEFT JOIN public.inventory_cache ic
+            ON le.barcode = ic.barcode
         LEFT JOIN public.log_feedback lf
             ON la.client_activity_id = lf.client_activity_id
         WHERE
             la.created_at > '2024-03-15'::date
             AND
-            (
-                li.client_activity_id IS NOT NULL
-                OR
-                le.client_activity_id IS NOT NULL
-            )
+            le.client_activity_id IS NOT NULL
             AND
             (
                 search_query IS NULL
                 OR
-                to_tsvector('english', COALESCE(li.name, le.name) || ' ' || COALESCE(li.brand, le.brand) || ' ' || COALESCE(li.ingredients::text, le.ingredients::text)) @@ plainto_tsquery('english', search_query)
+                to_tsvector('english', COALESCE(ic.name, le.name) || ' ' || COALESCE(ic.brand, le.brand) || ' ' || COALESCE(ic.ingredients::text, le.ingredients::text)) @@ plainto_tsquery('english', search_query)
                 OR
-                COALESCE(li.name, le.name) ILIKE '%' || search_query || '%'
+                COALESCE(ic.name, le.name) ILIKE '%' || search_query || '%'
                 OR
-                COALESCE(li.brand, le.brand) ILIKE '%' || search_query || '%'
+                COALESCE(ic.brand, le.brand) ILIKE '%' || search_query || '%'
                 OR
-                COALESCE(li.ingredients::text, le.ingredients::text) ILIKE '%' || search_query || '%'
+                COALESCE(ic.ingredients::text, le.ingredients::text) ILIKE '%' || search_query || '%'
             )
         ORDER BY
             barcode, name, brand, la.created_at DESC
@@ -380,37 +349,33 @@ BEGIN
         uli.created_at,
         uli.list_id,
         uli.list_item_id,
-        COALESCE(li.barcode, le.barcode) AS barcode,
-        COALESCE(li.name, le.name) AS name,
-        COALESCE(li.brand, le.brand) AS brand,
-        COALESCE(li.ingredients, le.ingredients::json) AS ingredients,
+        COALESCE(le.barcode, ic.barcode) AS barcode,
+        COALESCE(ic.name, le.name) AS name,
+        COALESCE(ic.brand, le.brand) AS brand,
+        COALESCE(ic.ingredients::json, le.ingredients::json) AS ingredients,
         COALESCE(
-            li.images,
+            ic.images::json,
             (SELECT json_agg(json_build_object('imageFileHash', text_val)) FROM unnest(le.images) AS dt(text_val))
         ) AS images
     FROM
         public.user_list_items uli
-        LEFT JOIN public.log_inventory li ON uli.list_item_id = li.client_activity_id
         LEFT JOIN public.log_extract le ON uli.list_item_id = le.client_activity_id
+        LEFT JOIN public.inventory_cache ic ON le.barcode = ic.barcode
     WHERE
         uli.list_id = input_list_id
         AND
-        (
-            li.client_activity_id IS NOT NULL
-            OR
-            le.client_activity_id IS NOT NULL
-        )
+        le.client_activity_id IS NOT NULL
         AND
         (
             search_query IS NULL
             OR
-            to_tsvector('english', COALESCE(li.name, le.name) || ' ' || COALESCE(li.brand, le.brand) || ' ' || COALESCE(li.ingredients::text, le.ingredients::text)) @@ plainto_tsquery('english', search_query)
+            to_tsvector('english', COALESCE(ic.name, le.name) || ' ' || COALESCE(ic.brand, le.brand) || ' ' || COALESCE(ic.ingredients::text, le.ingredients::text)) @@ plainto_tsquery('english', search_query)
             OR
-            COALESCE(li.name, le.name) ILIKE '%' || search_query || '%'
+            COALESCE(ic.name, le.name) ILIKE '%' || search_query || '%'
             OR
-            COALESCE(li.brand, le.brand) ILIKE '%' || search_query || '%'
+            COALESCE(ic.brand, le.brand) ILIKE '%' || search_query || '%'
             OR
-            COALESCE(li.ingredients::text, le.ingredients::text) ILIKE '%' || search_query || '%'
+            COALESCE(ic.ingredients::text, le.ingredients::text) ILIKE '%' || search_query || '%'
         )
     ORDER BY
         uli.created_at DESC;

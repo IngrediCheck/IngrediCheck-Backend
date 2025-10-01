@@ -72,7 +72,7 @@ export async function streamInventoryAndAnalysis(ctx: Context) {
     return;
   }
 
-  const inventoryResult = await Inventory.fetchProduct({
+  const inventoryResult = await Inventory.getProductFromCache({
     supabaseClient: ctx.state.supabaseClient,
     barcode,
     clientActivityId,
@@ -162,7 +162,23 @@ export async function performAnalysis(
 
   ctx.state.clientActivityId = requestBody.clientActivityId;
 
-  const product = productOverride ?? await lookupProduct(ctx, requestBody);
+  let product: DB.Product;
+
+  if (productOverride) {
+    product = productOverride;
+  } else {
+    const result = await Inventory.getProductFromCache({
+      supabaseClient: ctx.state.supabaseClient,
+      barcode: requestBody.barcode,
+      clientActivityId: ctx.state.clientActivityId,
+    });
+
+    if (result.status !== 200 || !result.product) {
+      throw new Error(result.error ?? "Product not found");
+    }
+
+    product = result.product;
+  }
 
   const hasValidPreferences = requestBody.userPreferenceText &&
     requestBody.userPreferenceText.trim() !== "" &&
@@ -213,45 +229,4 @@ export async function logAnalysisResult(
   } catch (error) {
     console.error("Failed to log analyze barcode event", error);
   }
-}
-
-async function lookupProduct(
-  ctx: Context,
-  requestBody: AnalysisRequest,
-): Promise<DB.Product> {
-  if (requestBody.barcode !== undefined) {
-    const result = await ctx.state.supabaseClient
-      .from("log_inventory")
-      .select()
-      .eq("barcode", requestBody.barcode)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
-
-    if (result.error) {
-      throw result.error;
-    }
-
-    return result.data as DB.Product;
-  }
-
-  const result = await ctx.state.supabaseClient
-    .from("log_extract")
-    .select()
-    .eq("client_activity_id", ctx.state.clientActivityId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
-
-  if (result.error) {
-    throw result.error;
-  }
-
-  return {
-    barcode: result.data.barcode,
-    brand: result.data.brand,
-    name: result.data.name,
-    ingredients: result.data.ingredients ?? [],
-    images: [],
-  };
 }

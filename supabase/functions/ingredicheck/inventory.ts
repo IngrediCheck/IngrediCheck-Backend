@@ -13,21 +13,93 @@ type InventoryFetchResult = {
   error?: string;
 };
 
+type InventoryCacheOptions = {
+  supabaseClient: any;
+  barcode?: string;
+  clientActivityId?: string;
+};
+
+type InventoryCacheResult = {
+  status: number;
+  product: DB.Product | null;
+  error?: string;
+};
+
+/**
+ * Queries the inventory_cache for a product by barcode.
+ * If no barcode is provided, falls back to log_extract by clientActivityId.
+ */
+export async function getProductFromCache(
+  options: InventoryCacheOptions,
+): Promise<InventoryCacheResult> {
+  const { supabaseClient, barcode, clientActivityId } = options;
+
+  // Query inventory_cache if barcode is provided
+  if (barcode !== undefined) {
+    const result = await supabaseClient
+      .from("inventory_cache")
+      .select()
+      .eq("barcode", barcode)
+      .single();
+
+    if (result.error) {
+      return {
+        status: 404,
+        product: null,
+        error: result.error.message ?? "Product not found in cache.",
+      };
+    }
+
+    return {
+      status: 200,
+      product: result.data as DB.Product,
+    };
+  }
+
+  // Fallback to log_extract if no barcode provided
+  if (clientActivityId !== undefined) {
+    const result = await supabaseClient
+      .from("log_extract")
+      .select()
+      .eq("client_activity_id", clientActivityId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (result.error) {
+      return {
+        status: 404,
+        product: null,
+        error: result.error.message ?? "Product not found in extract log.",
+      };
+    }
+
+    return {
+      status: 200,
+      product: {
+        barcode: result.data.barcode,
+        brand: result.data.brand,
+        name: result.data.name,
+        ingredients: result.data.ingredients ?? [],
+        images: [],
+      },
+    };
+  }
+
+  return {
+    status: 400,
+    product: null,
+    error: "Either barcode or clientActivityId must be provided.",
+  };
+}
+
 export async function fetchProduct(
   options: InventoryFetchOptions,
 ): Promise<InventoryFetchResult> {
-  const { supabaseClient, barcode, clientActivityId } = options;
+  const { barcode } = options;
 
   let product: DB.Product | null = null;
   let errorMessage: string | undefined;
-
-  const log_json: Record<string, unknown> = {
-    start_time: new Date(),
-    barcode: barcode,
-    data_source: "openfoodfacts/v3",
-    client_activity_id: clientActivityId,
-  };
-
   let status = 200;
 
   try {
@@ -44,24 +116,12 @@ export async function fetchProduct(
       errorMessage = data.status_verbose || "Product not found.";
     } else {
       product = processOpenFoodFactsProductData(barcode, data.product);
-      Object.assign(log_json, product);
     }
   } catch (error) {
     status = 500;
     errorMessage = (error as Error).message;
     console.error(`Failed to fetch product ${barcode}: ${errorMessage}`);
   }
-
-  log_json.end_time = new Date();
-  log_json.response_status = status;
-  if (errorMessage) {
-    log_json.error = errorMessage;
-  }
-
-  await supabaseClient.functions.invoke("background/log_inventory", {
-    body: log_json,
-    method: "POST",
-  });
 
   return {
     status,
@@ -75,18 +135,33 @@ export async function get(
   barcode: string,
   clientActivityId: string | null,
 ) {
-  const result = await fetchProduct({
+  // First, try to get product from cache
+  const cacheResult = await getProductFromCache({
+    supabaseClient: ctx.state.supabaseClient,
+    barcode,
+    clientActivityId: clientActivityId ?? undefined,
+  });
+
+  // If found in cache, return it
+  if (cacheResult.status === 200 && cacheResult.product) {
+    ctx.response.status = 200;
+    ctx.response.body = cacheResult.product;
+    return;
+  }
+
+  // If not in cache, fetch from OpenFoodFacts (fetchProduct is still available as fallback)
+  const fetchResult = await fetchProduct({
     supabaseClient: ctx.state.supabaseClient,
     barcode,
     clientActivityId,
   });
 
-  ctx.response.status = result.status;
-  if (result.status === 200 && result.product) {
-    ctx.response.body = result.product;
+  ctx.response.status = fetchResult.status;
+  if (fetchResult.status === 200 && fetchResult.product) {
+    ctx.response.body = fetchResult.product;
   } else {
     ctx.response.body = {
-      error: result.error ?? "Unexpected inventory error.",
+      error: fetchResult.error ?? "Unexpected inventory error.",
     };
   }
 }

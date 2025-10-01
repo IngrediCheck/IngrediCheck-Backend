@@ -45,25 +45,6 @@ router
         }
         ctx.response.status = 201
     })
-    .post('/background/log_inventory', async (ctx) => {
-        const body = ctx.request.body({ type: 'json', limit: 0 })
-        const body_json = await body.value
-        const user_id = await KitchenSink.getUserId(ctx)
-        const entry = {
-            ...body_json,
-            user_id: user_id,
-        }
-        const result = await ctx.state.supabaseClient
-            .from('log_inventory')
-            .insert(entry)
-        if (result.error) {
-            console.log('supabaseClient.from(log_inventory).insert() failed: ', result.error)
-            ctx.response.status = 500
-            ctx.response.body = result.error
-            return
-        }
-        ctx.response.status = 201
-    })
     .post('/background/log_llmcalls', async (ctx) => {
         const body = ctx.request.body({ type: 'json', limit: 0 })
         const body_json = await body.value
