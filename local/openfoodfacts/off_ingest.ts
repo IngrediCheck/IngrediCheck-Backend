@@ -538,7 +538,7 @@ async function askUploadPermission(stats: { count: number; totalBytes: number; d
 
 
 async function uploadJsonlToSupabase(path: string) {
-    console.log("📤 Starting upload to Supabase (TEMPORARY: only updating images column)...");
+    console.log("📤 Starting upload to Supabase...");
     
     // Load env for Supabase connection
     const url = Deno.env.get("SUPABASE_URL") ?? "";
@@ -639,24 +639,18 @@ async function uploadJsonlToSupabase(path: string) {
                         // Now create and add the upload promise
                         const uploadPromise = (async () => {
                             try {
-                                // TEMPORARY: Only update images column
-                                const imageUpdates = batch.map(row => ({
-                                    barcode: row.barcode,
-                                    images: row.images
-                                }));
-                                
                                 const { error } = await supabase
                                     .from('inventory_cache')
-                                    .upsert(imageUpdates, { onConflict: 'barcode', ignoreDuplicates: false });
+                                    .upsert(batch, { onConflict: 'barcode' });
                                 
                                 if (error) {
-                                    console.error(`❌ Batch ${currentBatchNum} failed:`, JSON.stringify(error));
+                                    console.error(`❌ Batch ${currentBatchNum} failed:`, error.message);
                                     throw error;
                                 }
                                 
                                 // Only log every 10 batches
                                 if (currentBatchNum % 10 === 0) {
-                                    console.log(`✅ Updated images for batch ${currentBatchNum} (${batch.length} rows)`);
+                                    console.log(`✅ Uploaded batch ${currentBatchNum} (${batch.length} rows)`);
                                 }
                             } catch (error) {
                                 console.error(`❌ Upload error at batch ${currentBatchNum}:`, error);
@@ -728,22 +722,16 @@ async function uploadJsonlToSupabase(path: string) {
             
             const uploadPromise = (async () => {
                 try {
-                    // TEMPORARY: Only update images column
-                    const imageUpdates = batch.map(row => ({
-                        barcode: row.barcode,
-                        images: row.images
-                    }));
-                    
                     const { error } = await supabase
                         .from('inventory_cache')
-                        .upsert(imageUpdates, { onConflict: 'barcode', ignoreDuplicates: false });
+                        .upsert(batch, { onConflict: 'barcode' });
                     
                     if (error) {
-                        console.error(`❌ Final batch ${currentBatchNum} failed:`, JSON.stringify(error));
+                        console.error(`❌ Final batch ${currentBatchNum} failed:`, error.message);
                         throw error;
                     }
                     
-                    console.log(`✅ Updated images for final batch ${currentBatchNum} (${batch.length} rows)`);
+                    console.log(`✅ Uploaded final batch ${currentBatchNum} (${batch.length} rows)`);
                 } catch (error) {
                     console.error(`❌ Upload error at final batch ${currentBatchNum}:`, error);
                     throw error;
@@ -760,7 +748,7 @@ async function uploadJsonlToSupabase(path: string) {
             console.log(`✅ All uploads completed!`);
         }
         
-        console.log(`✅ Image update complete! ${total} rows processed in ${batchCount} batches`);
+        console.log(`✅ Upload complete! ${total} rows processed in ${batchCount} batches`);
         
     } finally {
         file.close();
@@ -850,7 +838,7 @@ Examples:
             return;
         }
     }
-    console.log("\nUploading to Supabase (TEMPORARY: only updating images column)...");
+    console.log("\nUploading to Supabase (batched upserts)...");
     const start = Date.now();
     await uploadJsonlToSupabase(OUTPUT_PATH);
     const elapsed = (Date.now() - start) / 1000;
