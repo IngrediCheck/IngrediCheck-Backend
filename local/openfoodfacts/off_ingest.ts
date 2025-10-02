@@ -1,6 +1,15 @@
 // deno run -A --unstable-kv local/openfoodfacts/off_ingest.ts
 // Environment: Copy .env.template to .env and fill in your values
 // Performance: Use --unstable-kv for better memory management
+//
+// IMAGE STORAGE STRATEGY:
+// This script extracts raw image metadata (language keys only) from Open Food Facts
+// and stores it in the database. Image URLs are NOT constructed here.
+// At runtime, server code will:
+//   - Select appropriate images based on type (front, ingredients, nutrition, packaging)
+//   - Prefer English, fallback to other languages
+//   - Prefer medium resolution (400px), fallback to next available size
+//   - Construct URLs using: https://static.openfoodfacts.org/images/products/{barcodePath}/{imgId}.{size}.jpg
 
 // Load environment variables from .env file
 async function loadEnv() {
@@ -30,11 +39,11 @@ type Ingredient = {
     ingredients?: Ingredient[];
 };
 
-type Image = { 
-    url: string; 
-    resolution?: string; 
-    width?: number; 
-    height?: number; 
+type ImageMetadata = {
+    type: 'front' | 'ingredients' | 'nutrition' | 'packaging';
+    language: string;  // e.g., 'en', 'fr', 'de'
+    imgid: string;     // numeric image ID (e.g., '1', '2', '3')
+    sizes: ('full' | '400' | '200' | '100')[];  // available sizes
 };
 
 type CacheRow = {
@@ -43,7 +52,7 @@ type CacheRow = {
     brand?: string;
     name?: string;
     ingredients: Ingredient[];
-    images: Image[];
+    images: ImageMetadata[];
     off_last_modified_t?: number;
 };
 
@@ -69,158 +78,74 @@ function mapIngredient(node: any): Ingredient {
     return item;
 }
 
-function isValidImageUrl(url: string): boolean {
-    try {
-        const parsedUrl = new URL(url);
-        return parsedUrl.protocol === 'https:' && 
-               parsedUrl.hostname === 'static.openfoodfacts.org' &&
-               url.includes('/images/products/') &&
-               url.endsWith('.jpg');
-    } catch {
-        return false;
-    }
-}
-
-async function validateImageUrlExists(url: string): Promise<boolean> {
-    try {
-        const response = await fetch(url, { method: 'HEAD' });
-        return response.status === 200;
-    } catch {
-        return false;
-    }
-}
-
-// Convert barcode to Open Food Facts path format
-// Example: "3017620422003" -> "301/762/042/2003"
-// Example: "1" -> "1"
-function barcodeToPath(barcode: string): string {
-    // Short barcodes (8 digits or fewer) are used as-is
-    if (barcode.length <= 8) {
-        return barcode;
-    }
-    // Longer barcodes are padded to at least 13 digits and split
-    const code = barcode.padStart(13, '0');
-    // Split into segments of 3 digits, except the last part
-    const segments: string[] = [];
-    for (let i = 0; i < code.length - 4; i += 3) {
-        segments.push(code.slice(i, i + 3));
-    }
-    segments.push(code.slice(code.length - 4)); // Last 4 digits
-    return segments.join('/');
-}
-
-function extractDisplayImageUrls(images: any, barcode: string): Image[] {
+/**
+ * Extract image metadata from Open Food Facts product data.
+ * Stores only language keys (front_en, ingredients_fr, etc.) - drops numeric keys.
+ * URL construction happens at runtime in server code.
+ * 
+ * RUNTIME URL CONSTRUCTION (for server code):
+ * 
+ * function barcodeToPath(barcode: string): string {
+ *     if (barcode.length <= 8) return barcode;
+ *     const code = barcode.padStart(13, '0');
+ *     const segments: string[] = [];
+ *     for (let i = 0; i < code.length - 4; i += 3) {
+ *         segments.push(code.slice(i, i + 3));
+ *     }
+ *     segments.push(code.slice(code.length - 4));
+ *     return segments.join('/');
+ * }
+ * 
+ * function constructImageUrl(barcode: string, imgId: string, size?: '400' | '200' | '100'): string {
+ *     const path = barcodeToPath(barcode);
+ *     const sizeStr = size ? `.${size}` : '';
+ *     return `https://static.openfoodfacts.org/images/products/${path}/${imgId}${sizeStr}.jpg`;
+ * }
+ */
+function extractDisplayImageUrls(images: any, _barcode: string): ImageMetadata[] {
     if (!images || typeof images !== "object") {
         return [];
     }
     
-    const urls: Image[] = [];
-    const processedImages = new Set<string>(); // Track processed image IDs to avoid duplicates
-    const barcodePath = barcodeToPath(barcode);
+    const metadata: ImageMetadata[] = [];
     
     try {
-        // Open Food Facts image structure: images contains both numeric keys (1,2,3,4) and language-specific keys (front_en, ingredients_fr, etc.)
-        // Language-specific keys reference numeric images via imgid
+        // Image types we care about
+        const imageTypes = ['front', 'ingredients', 'nutrition', 'packaging'];
         
-        // First, collect all language-specific front images
-        const languageKeys = ['front_en', 'front_fr', 'front_de', 'front_es', 'front_it', 'front_pt', 'front_nl', 'front_sv', 'front_da', 'front_no', 'front_fi'];
+        // Common languages (ordered by priority)
+        const languages = ['en', 'fr', 'de', 'es', 'it', 'pt', 'nl', 'pl', 'ru', 'ja', 'zh', 'sv', 'da', 'no', 'fi'];
         
-        for (const langKey of languageKeys) {
-            const imageRef = images[langKey];
-            if (imageRef && typeof imageRef === "object" && imageRef.imgid) {
-                const imgId = String(imageRef.imgid); // Ensure imgid is a string
-                if (processedImages.has(imgId)) continue; // Skip if already processed
+        // Extract all language-specific keys for each image type
+        for (const imageType of imageTypes) {
+            for (const lang of languages) {
+                const key = `${imageType}_${lang}`;
+                const imageRef = images[key];
                 
-                const imageData = images[imgId];
-                if (imageData && typeof imageData === "object" && imageData.sizes) {
-                    const sizes = imageData.sizes;
+                if (imageRef && typeof imageRef === "object" && imageRef.imgid && imageRef.sizes) {
+                    // Collect which sizes are available
+                    const availableSizes: ('full' | '400' | '200' | '100')[] = [];
+                    if (imageRef.sizes.full) availableSizes.push('full');
+                    if (imageRef.sizes["400"]) availableSizes.push('400');
+                    if (imageRef.sizes["200"]) availableSizes.push('200');
+                    if (imageRef.sizes["100"]) availableSizes.push('100');
                     
-                    // Collect all available sizes for this image, grouped by resolution
-                    const imageUrls: { url: string; resolution: string; width: number; height: number }[] = [];
-                    
-                    if (sizes.full && sizes.full.w && sizes.full.h) {
-                        const url = `https://static.openfoodfacts.org/images/products/${barcodePath}/${imgId}.jpg`;
-                        if (isValidImageUrl(url)) {
-                            imageUrls.push({ url, resolution: 'full', width: sizes.full.w, height: sizes.full.h });
-                        }
-                    }
-                    
-                    if (sizes["400"] && sizes["400"].w && sizes["400"].h) {
-                        const url = `https://static.openfoodfacts.org/images/products/${barcodePath}/${imgId}.400.jpg`;
-                        if (isValidImageUrl(url)) {
-                            imageUrls.push({ url, resolution: '400px', width: sizes["400"].w, height: sizes["400"].h });
-                        }
-                    }
-                    
-                    if (sizes["200"] && sizes["200"].w && sizes["200"].h) {
-                        const url = `https://static.openfoodfacts.org/images/products/${barcodePath}/${imgId}.200.jpg`;
-                        if (isValidImageUrl(url)) {
-                            imageUrls.push({ url, resolution: '200px', width: sizes["200"].w, height: sizes["200"].h });
-                        }
-                    }
-                    
-                    if (sizes["100"] && sizes["100"].w && sizes["100"].h) {
-                        const url = `https://static.openfoodfacts.org/images/products/${barcodePath}/${imgId}.100.jpg`;
-                        if (isValidImageUrl(url)) {
-                            imageUrls.push({ url, resolution: '100px', width: sizes["100"].w, height: sizes["100"].h });
-                        }
-                    }
-                    
-                    // Add all valid URLs for this image
-                    for (const img of imageUrls) {
-                        urls.push({ 
-                            url: img.url,
-                            resolution: img.resolution,
-                            width: img.width,
-                            height: img.height
+                    if (availableSizes.length > 0) {
+                        metadata.push({
+                            type: imageType as 'front' | 'ingredients' | 'nutrition' | 'packaging',
+                            language: lang,
+                            imgid: String(imageRef.imgid),
+                            sizes: availableSizes
                         });
                     }
-                    
-                    processedImages.add(imgId);
-                }
-            }
-        }
-        
-        // If no language-specific front images found, try any numeric image
-        if (urls.length === 0) {
-            for (const [key, imageData] of Object.entries(images)) {
-                if (/^\d+$/.test(key) && imageData && typeof imageData === "object" && (imageData as any).sizes) {
-                    const sizes = (imageData as any).sizes;
-                    
-                    // Collect all available sizes for this image
-                    if (sizes.full && sizes.full.w && sizes.full.h) {
-                        const url = `https://static.openfoodfacts.org/images/products/${barcodePath}/${key}.jpg`;
-                        if (isValidImageUrl(url)) {
-                            urls.push({ 
-                                url, 
-                                resolution: 'full', 
-                                width: sizes.full.w, 
-                                height: sizes.full.h 
-                            });
-                        }
-                    }
-                    
-                    if (sizes["400"] && sizes["400"].w && sizes["400"].h) {
-                        const url = `https://static.openfoodfacts.org/images/products/${barcodePath}/${key}.400.jpg`;
-                        if (isValidImageUrl(url)) {
-                            urls.push({ 
-                                url, 
-                                resolution: '400px', 
-                                width: sizes["400"].w, 
-                                height: sizes["400"].h 
-                            });
-                        }
-                    }
-                    
-                    if (urls.length > 0) break; // Stop after finding the first valid image
                 }
             }
         }
     } catch (_error) {
-        // ignore malformed structures
+        // Ignore malformed structures
     }
     
-    return urls;
+    return metadata;
 }
 
 function mapToCacheRow(product: any): CacheRow | null {
