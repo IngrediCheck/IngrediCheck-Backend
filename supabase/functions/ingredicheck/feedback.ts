@@ -1,6 +1,10 @@
 import { Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 import * as KitchenSink from '../shared/kitchensink.ts'
 
+declare const EdgeRuntime: {
+  waitUntil(promise: Promise<any>): void;
+};
+
 const MB = 1024 * 1024
 
 export async function submitFeedback(ctx: Context) {
@@ -13,14 +17,16 @@ export async function submitFeedback(ctx: Context) {
         const feedback = JSON.parse(formData.fields['feedback'])
 
         if (feedback.images) {
-            await ctx.state.supabaseClient.functions.invoke('background/log_images', {
-                body: {
-                    activity_id: ctx.state.activityId,
-                    client_activity_id: clientActivityId,
-                    product_images: feedback.images
-                },
-                method: 'POST'
-            })
+            EdgeRuntime.waitUntil(
+                ctx.state.supabaseClient.functions.invoke('background/log_images', {
+                    body: {
+                        activity_id: ctx.state.activityId,
+                        client_activity_id: clientActivityId,
+                        product_images: feedback.images
+                    },
+                    method: 'POST'
+                })
+            )
         }
 
         const result = await ctx.state.supabaseClient

@@ -1,6 +1,10 @@
 import { Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 import * as DB from '../shared/db.ts'
 
+declare const EdgeRuntime: {
+  waitUntil(promise: Promise<any>): void;
+};
+
 export async function get(ctx: Context, barcode: string, clientActivityId: string | null) {
 
     let result_json: any = {}
@@ -33,10 +37,12 @@ export async function get(ctx: Context, barcode: string, clientActivityId: strin
 
     log_json.end_time = new Date()
 
-    await ctx.state.supabaseClient.functions.invoke('background/log_inventory', {
-        body: log_json,
-        method: 'POST'
-    })
+    EdgeRuntime.waitUntil(
+        ctx.state.supabaseClient.functions.invoke('background/log_inventory', {
+            body: log_json,
+            method: 'POST'
+        })
+    )
 
     ctx.response.body = result_json
 }

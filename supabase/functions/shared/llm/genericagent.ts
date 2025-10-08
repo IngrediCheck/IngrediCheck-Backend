@@ -3,6 +3,10 @@ import { Context } from "oak";
 import { AgentProgram, ConversationState } from "./programs.ts";
 import { ChatFunction, ChatMessage, FunctionObject } from "./types.ts";
 
+declare const EdgeRuntime: {
+  waitUntil(promise: Promise<any>): void;
+};
+
 function buildConversationState(
   agentName: string,
   temperature: number,
@@ -153,10 +157,12 @@ export async function genericAgent(
     }
   }
 
-  ctx.state.supabaseClient.functions.invoke("background/log_llmcalls", {
-    body: logs,
-    method: "POST",
-  });
+  EdgeRuntime.waitUntil(
+    ctx.state.supabaseClient.functions.invoke("background/log_llmcalls", {
+      body: logs,
+      method: "POST",
+    })
+  );
 
   return conversationState.messages;
 }

@@ -3,6 +3,10 @@ import { Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 import * as DB from '../shared/db.ts'
 import { extractorAgent } from '../shared/llm/extractoragent.ts'
 
+declare const EdgeRuntime: {
+  waitUntil(promise: Promise<any>): void;
+};
+
 const MB = 1024 * 1024
 
 export async function extract(ctx: Context) {
@@ -47,28 +51,32 @@ export async function extract(ctx: Context) {
 
     const endTime = new Date()
 
-    await ctx.state.supabaseClient.functions.invoke('background/log_images', {
-        body: {
-            activity_id: ctx.state.activityId,
-            client_activity_id: ctx.state.clientActivityId,
-            product_images: requestBody.productImages
-        },
-        method: 'POST'
-    })
+    EdgeRuntime.waitUntil(
+        ctx.state.supabaseClient.functions.invoke('background/log_images', {
+            body: {
+                activity_id: ctx.state.activityId,
+                client_activity_id: ctx.state.clientActivityId,
+                product_images: requestBody.productImages
+            },
+            method: 'POST'
+        })
+    )
 
-    await ctx.state.supabaseClient.functions.invoke('background/log_extract', {
-        body: {
-            activity_id: ctx.state.activityId,
-            client_activity_id: ctx.state.clientActivityId,
-            start_time: startTime,
-            end_time: endTime,
-            response_status: ctx.response.status,
-            barcode: product.barcode,
-            brand: product.brand,
-            name: product.name,
-            ingredients: product.ingredients,
-            images: product.images.map((i: any) => i.imageFileHash)
-        },
-        method: 'POST'
-    })
+    EdgeRuntime.waitUntil(
+        ctx.state.supabaseClient.functions.invoke('background/log_extract', {
+            body: {
+                activity_id: ctx.state.activityId,
+                client_activity_id: ctx.state.clientActivityId,
+                start_time: startTime,
+                end_time: endTime,
+                response_status: ctx.response.status,
+                barcode: product.barcode,
+                brand: product.brand,
+                name: product.name,
+                ingredients: product.ingredients,
+                images: product.images.map((i: any) => i.imageFileHash)
+            },
+            method: 'POST'
+        })
+    )
 }

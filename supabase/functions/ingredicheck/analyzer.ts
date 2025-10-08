@@ -3,6 +3,10 @@ import { Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 import * as DB from '../shared/db.ts'
 import { ingredientAnalyzerAgent } from '../shared/llm/ingredientanalyzeragent.ts'
 
+declare const EdgeRuntime: {
+  waitUntil(promise: Promise<any>): void;
+};
+
 const MB = 1024 * 1024
 
 export async function analyze(ctx: Context) {
@@ -73,21 +77,23 @@ export async function analyze(ctx: Context) {
         ctx.response.body = ingredientRecommendations
     } catch (error) {
         ctx.response.status = 500
-        ctx.response.body = error
+        ctx.response.body = error instanceof Error ? error.message : String(error)
     }
 
     const endTime = new Date()
 
-    ctx.state.supabaseClient.functions.invoke('background/log_analyzebarcode', {
-        body: {
-            activity_id: ctx.state.activityId,
-            client_activity_id: ctx.state.clientActivityId,
-            start_time: startTime,
-            end_time: endTime,
-            request_body: requestBody,
-            response_status: ctx.response.status,
-            response_body: ctx.response.body
-        },
-        method: 'POST'
-    })
+    EdgeRuntime.waitUntil(
+        ctx.state.supabaseClient.functions.invoke('background/log_analyzebarcode', {
+            body: {
+                activity_id: ctx.state.activityId,
+                client_activity_id: ctx.state.clientActivityId,
+                start_time: startTime,
+                end_time: endTime,
+                request_body: requestBody,
+                response_status: ctx.response.status,
+                response_body: ctx.response.body
+            },
+            method: 'POST'
+        })
+    )
 }
