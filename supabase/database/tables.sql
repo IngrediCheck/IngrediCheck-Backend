@@ -2,6 +2,99 @@
 --------------------------------------------------------------------------------
 
 create table
+    public.inventory_cache (
+        created_at timestamp with time zone not null default now(),
+        updated_at timestamp with time zone not null default now(),
+        last_refreshed_at timestamp with time zone,
+        barcode text not null,
+        data_source text not null default 'openfoodfacts/v3',
+        name text,
+        brand text,
+        ingredients jsonb not null default '[]'::jsonb,
+        images jsonb not null default '[]'::jsonb,
+        off_last_modified_t bigint,
+        etag text,
+        constraint inventory_cache_pkey primary key (barcode)
+    ) tablespace pg_default;
+
+alter table public.inventory_cache enable row level security;
+
+create policy "Select for all authenticated users" on public.inventory_cache
+    for select
+    using (true);
+
+create policy "Write for service role only" on public.inventory_cache
+    for ALL
+    using (auth.role() = 'service_role')
+    with check (auth.role() = 'service_role');
+
+create or replace function set_inventory_cache_updated_at()
+returns trigger as $$
+begin
+    new.updated_at = now();
+    return new;
+end;
+$$ language plpgsql;
+
+create trigger trg_inventory_cache_updated_at
+before update on public.inventory_cache
+for each row execute function set_inventory_cache_updated_at();
+
+-- Function to match barcodes with or without leading zeros
+-- Only pads UPWARD to avoid false matches between different barcode types
+-- Based on inventory stats: 93% are 13-digit, 5% are 8-digit
+-- Examples: "884912373946" (12) matches "0884912373946" (13) ✓
+--           "12345678" (8) does NOT match "0000012345678" (13) ✗
+create or replace function barcode_matches(barcode1 text, barcode2 text)
+returns boolean as $$
+declare
+    len1 int;
+    len2 int;
+    min_len int;
+begin
+    if barcode1 is null or barcode2 is null then
+        return false;
+    end if;
+    
+    -- Direct match (fastest check)
+    if barcode1 = barcode2 then
+        return true;
+    end if;
+    
+    len1 := length(barcode1);
+    len2 := length(barcode2);
+    min_len := least(len1, len2);
+    
+    -- Only pad to lengths equal to or greater than the shorter barcode
+    -- This prevents 8-digit codes from matching unrelated 13-digit codes
+    
+    -- Try 8 digits (EAN-8) only if shortest is <= 8
+    if min_len <= 8 and lpad(barcode1, 8, '0') = lpad(barcode2, 8, '0') then
+        return true;
+    end if;
+    
+    -- Try 12 digits (UPC-A) only if shortest is <= 12
+    if min_len <= 12 and lpad(barcode1, 12, '0') = lpad(barcode2, 12, '0') then
+        return true;
+    end if;
+    
+    -- Try 13 digits (EAN-13) only if shortest is <= 13
+    if min_len <= 13 and lpad(barcode1, 13, '0') = lpad(barcode2, 13, '0') then
+        return true;
+    end if;
+    
+    -- Try 14 digits (ITF-14) only if shortest is <= 14
+    if min_len <= 14 and lpad(barcode1, 14, '0') = lpad(barcode2, 14, '0') then
+        return true;
+    end if;
+    
+    return false;
+end;
+$$ language plpgsql immutable;
+
+--------------------------------------------------------------------------------
+
+create table
     public.user_list_items (
         created_at timestamp with time zone not null default now(),
         user_id uuid not null,
@@ -60,33 +153,6 @@ ALTER TABLE public.log_feedback ENABLE ROW LEVEL SECURITY;
 CREATE POLICY user_update_own_log_infer ON public.log_feedback
     FOR ALL
     USING (auth.uid() = user_id);
-
---------------------------------------------------------------------------------
-
-create table
-    public.log_inventory (
-        created_at timestamp with time zone not null default now(),
-        start_time timestamp with time zone,
-        end_time timestamp with time zone,
-        user_id uuid not null,
-        client_activity_id uuid,
-        barcode text not null,
-        data_source text not null,
-        name text,
-        brand text,
-        ingredients json,
-        images json
-    ) tablespace pg_default;
-
-alter table public.log_inventory enable row level security;
-
-create policy "Select for all authenticated users" on public.log_inventory
-    for select
-    using (true);
-
-create policy "Insert for authenticated users" on public.log_inventory
-    for insert
-    with check (auth.uid() = user_id);
 
 --------------------------------------------------------------------------------
 
@@ -264,12 +330,12 @@ BEGIN
         SELECT DISTINCT ON (barcode, name, brand)
             la.created_at,
             la.client_activity_id,
-            COALESCE(li.barcode, le.barcode) AS barcode,
-            COALESCE(li.name, le.name) AS name,
-            COALESCE(li.brand, le.brand) AS brand,
-            COALESCE(li.ingredients, le.ingredients) AS ingredients,
+            COALESCE(le.barcode, ic.barcode) AS barcode,
+            COALESCE(ic.name, le.name) AS name,
+            COALESCE(ic.brand, le.brand) AS brand,
+            COALESCE(ic.ingredients::json, le.ingredients) AS ingredients,
             COALESCE(
-                li.images,
+                ic.images::json,
                 (SELECT json_agg(json_build_object('imageFileHash', text_val)) FROM unnest(le.images) AS dt(text_val))
             ) AS images,
             la.response_body AS ingredient_recommendations,
@@ -283,31 +349,27 @@ BEGIN
             ) AS favorited
         FROM
             public.log_analyzebarcode la
-        LEFT JOIN public.log_inventory li 
-            ON la.client_activity_id = li.client_activity_id 
         LEFT JOIN public.log_extract le 
             ON la.client_activity_id = le.client_activity_id 
+        LEFT JOIN public.inventory_cache ic
+            ON barcode_matches(le.barcode, ic.barcode)
         LEFT JOIN public.log_feedback lf
             ON la.client_activity_id = lf.client_activity_id
         WHERE
             la.created_at > '2024-03-15'::date
             AND
-            (
-                li.client_activity_id IS NOT NULL
-                OR
-                le.client_activity_id IS NOT NULL
-            )
+            le.client_activity_id IS NOT NULL
             AND
             (
                 search_query IS NULL
                 OR
-                to_tsvector('english', COALESCE(li.name, le.name) || ' ' || COALESCE(li.brand, le.brand) || ' ' || COALESCE(li.ingredients::text, le.ingredients::text)) @@ plainto_tsquery('english', search_query)
+                to_tsvector('english', COALESCE(ic.name, le.name) || ' ' || COALESCE(ic.brand, le.brand) || ' ' || COALESCE(ic.ingredients::text, le.ingredients::text)) @@ plainto_tsquery('english', search_query)
                 OR
-                COALESCE(li.name, le.name) ILIKE '%' || search_query || '%'
+                COALESCE(ic.name, le.name) ILIKE '%' || search_query || '%'
                 OR
-                COALESCE(li.brand, le.brand) ILIKE '%' || search_query || '%'
+                COALESCE(ic.brand, le.brand) ILIKE '%' || search_query || '%'
                 OR
-                COALESCE(li.ingredients::text, le.ingredients::text) ILIKE '%' || search_query || '%'
+                COALESCE(ic.ingredients::text, le.ingredients::text) ILIKE '%' || search_query || '%'
             )
         ORDER BY
             barcode, name, brand, la.created_at DESC
@@ -339,37 +401,33 @@ BEGIN
         uli.created_at,
         uli.list_id,
         uli.list_item_id,
-        COALESCE(li.barcode, le.barcode) AS barcode,
-        COALESCE(li.name, le.name) AS name,
-        COALESCE(li.brand, le.brand) AS brand,
-        COALESCE(li.ingredients, le.ingredients::json) AS ingredients,
+        COALESCE(le.barcode, ic.barcode) AS barcode,
+        COALESCE(ic.name, le.name) AS name,
+        COALESCE(ic.brand, le.brand) AS brand,
+        COALESCE(ic.ingredients::json, le.ingredients::json) AS ingredients,
         COALESCE(
-            li.images,
+            ic.images::json,
             (SELECT json_agg(json_build_object('imageFileHash', text_val)) FROM unnest(le.images) AS dt(text_val))
         ) AS images
     FROM
         public.user_list_items uli
-        LEFT JOIN public.log_inventory li ON uli.list_item_id = li.client_activity_id
         LEFT JOIN public.log_extract le ON uli.list_item_id = le.client_activity_id
+        LEFT JOIN public.inventory_cache ic ON barcode_matches(le.barcode, ic.barcode)
     WHERE
         uli.list_id = input_list_id
         AND
-        (
-            li.client_activity_id IS NOT NULL
-            OR
-            le.client_activity_id IS NOT NULL
-        )
+        le.client_activity_id IS NOT NULL
         AND
         (
             search_query IS NULL
             OR
-            to_tsvector('english', COALESCE(li.name, le.name) || ' ' || COALESCE(li.brand, le.brand) || ' ' || COALESCE(li.ingredients::text, le.ingredients::text)) @@ plainto_tsquery('english', search_query)
+            to_tsvector('english', COALESCE(ic.name, le.name) || ' ' || COALESCE(ic.brand, le.brand) || ' ' || COALESCE(ic.ingredients::text, le.ingredients::text)) @@ plainto_tsquery('english', search_query)
             OR
-            COALESCE(li.name, le.name) ILIKE '%' || search_query || '%'
+            COALESCE(ic.name, le.name) ILIKE '%' || search_query || '%'
             OR
-            COALESCE(li.brand, le.brand) ILIKE '%' || search_query || '%'
+            COALESCE(ic.brand, le.brand) ILIKE '%' || search_query || '%'
             OR
-            COALESCE(li.ingredients::text, le.ingredients::text) ILIKE '%' || search_query || '%'
+            COALESCE(ic.ingredients::text, le.ingredients::text) ILIKE '%' || search_query || '%'
         )
     ORDER BY
         uli.created_at DESC;
