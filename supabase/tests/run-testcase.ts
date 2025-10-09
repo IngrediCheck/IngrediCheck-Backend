@@ -1,7 +1,6 @@
 #!/usr/bin/env -S deno run --allow-env --allow-net --allow-read
 
-import 'https://deno.land/std@0.224.0/dotenv/load.ts'
-
+import { load } from 'https://deno.land/std@0.224.0/dotenv/mod.ts'
 import { basename, dirname, join, fromFileUrl } from 'https://deno.land/std@0.224.0/path/mod.ts'
 import { parse } from 'https://deno.land/std@0.224.0/flags/mod.ts'
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
@@ -33,6 +32,7 @@ type RecordedRequest = {
 
 type RuntimeConfig = {
     baseUrl: string
+    functionsBaseUrl: string
     anonKey: string
     stopOnFailure: boolean
 }
@@ -50,8 +50,34 @@ type PlaceholderValue = {
 
 type PlaceholderStore = Map<string, PlaceholderValue>
 
+const scriptDir = dirname(fromFileUrl(import.meta.url))
+const envCandidates = [
+    join(scriptDir, '..', '..', '.env'),
+    join(scriptDir, '..', '.env'),
+    join(scriptDir, '.env')
+]
+
+let envLoaded = false
+for (const candidate of envCandidates) {
+    try {
+        const result = await load({ envPath: candidate, export: true })
+        if (Object.keys(result).length > 0) {
+            envLoaded = true
+            break
+        }
+    } catch (error) {
+        if (!(error instanceof Deno.errors.NotFound)) {
+            console.warn(`Warning: Failed to load .env from ${candidate}:`, error)
+        }
+    }
+}
+
+if (!envLoaded) {
+    console.warn('Warning: No .env file found for run-testcase script. Ensure environment variables are set.')
+}
+
 const PLACEHOLDER_REGEXP = /\{\{var:([A-Z0-9_:-]+)\}\}/g
-const TESTCASES_ROOT = join(dirname(fromFileUrl(import.meta.url)), 'testcases')
+const TESTCASES_ROOT = join(scriptDir, 'testcases')
 
 type TestCase = {
     slug: string
@@ -136,18 +162,30 @@ function promptTestCaseSelection(cases: TestCase[]): TestCase[] {
     }
 }
 
+function trimTrailingSlash(value: string): string {
+    return value.replace(/\/+$/, '')
+}
+
+function ensureTrailingSlash(value: string): string {
+    return value.endsWith('/') ? value : `${value}/`
+}
+
 function loadConfig(): RuntimeConfig {
     const args = parse(Deno.args, {
-        string: ['base-url', 'anon-key'],
+        string: ['base-url', 'functions-url', 'anon-key'],
         boolean: ['stop-on-failure'],
         default: { 'stop-on-failure': false }
     })
 
-    const baseUrl = (args['base-url'] as string | undefined) ?? Deno.env.get('SUPABASE_BASE_URL') ?? ''
+    const baseUrlInput = (args['base-url'] as string | undefined) ?? Deno.env.get('SUPABASE_BASE_URL') ?? ''
     const anonKey = (args['anon-key'] as string | undefined) ?? Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    const functionsUrlInput =
+        (args['functions-url'] as string | undefined) ??
+        Deno.env.get('SUPABASE_FUNCTIONS_URL') ??
+        `${trimTrailingSlash(baseUrlInput)}/functions/v1`
 
     const missing: string[] = []
-    if (!baseUrl) missing.push('--base-url or SUPABASE_BASE_URL')
+    if (!baseUrlInput) missing.push('--base-url or SUPABASE_BASE_URL')
     if (!anonKey) missing.push('--anon-key or SUPABASE_ANON_KEY')
     if (missing.length > 0) {
         console.error(`Error: Missing required configuration: ${missing.join(', ')}`)
@@ -155,7 +193,8 @@ function loadConfig(): RuntimeConfig {
     }
 
     return {
-        baseUrl,
+        baseUrl: trimTrailingSlash(baseUrlInput),
+        functionsBaseUrl: ensureTrailingSlash(trimTrailingSlash(functionsUrlInput)),
         anonKey,
         stopOnFailure: Boolean(args['stop-on-failure'])
     }
@@ -389,7 +428,7 @@ async function replayRequest(entry: RecordedRequest, config: RuntimeConfig, toke
     const resolvedPath = resolvePlaceholdersInPath(entry.request.path, variables)
     const queryParams = resolvePlaceholdersInQuery(entry.request.query ?? {}, variables)
 
-    const url = new URL(resolvedPath.replace(/^\//, ''), config.baseUrl.endsWith('/') ? config.baseUrl : `${config.baseUrl}/`)
+    const url = new URL(resolvedPath.replace(/^\//, ''), config.functionsBaseUrl)
     queryParams.forEach((value, key) => {
         url.searchParams.append(key, value)
     })
@@ -438,10 +477,6 @@ async function replayRequest(entry: RecordedRequest, config: RuntimeConfig, toke
 
 async function replayArtifact(sessionPath: string, testCaseName: string, config: RuntimeConfig, tokens: Tokens): Promise<{ stats: ReplayStats; aborted: boolean }> {
     const artifact = await loadArtifact(sessionPath)
-
-    if (artifact.recordedUserId && artifact.recordedUserId !== tokens.userId) {
-        console.warn('Warning: replay user does not match recorded user. Recorded:', artifact.recordedUserId, 'Replay:', tokens.userId)
-    }
 
     const runtimeVariables: PlaceholderStore = new Map<string, PlaceholderValue>()
     const stats: ReplayStats = { total: artifact.requests.length, passed: 0, failed: 0 }
