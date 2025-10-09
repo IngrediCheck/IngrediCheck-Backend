@@ -17,7 +17,7 @@ This document defines how we will detect regressions in IngrediCheck’s Supabas
 ## 3. Harness Architecture
 - **Test workspace**: Place all regression tooling under `supabase/tests/` so scripts, fixtures, and recordings travel with the edge functions they exercise.
 - **Environment bootstrap script**: Implement `supabase/tests/setup-local-env.ts` that starts the Supabase CLI stack, launches required edge functions, waits for readiness, and tears everything down when invoked locally.
-- **Regression runner script**: Implement `supabase/tests/run-regression.ts` that consumes recording artifacts and replays them against a supplied backend base URL (local or remote), emitting concise pass/fail output.
+- **Regression runner script**: Implement `supabase/tests/run-regression.ts` that consumes recording artifacts and replays them against a supplied backend base URL (local or remote), emitting concise pass/fail output while authenticating with `signInAnonymously` and resolving `{{var:...}}` placeholders.
 - **Shared utilities**: Collect common helpers in `supabase/tests/shared/setup.ts` (Supabase client creation, auth token retrieval, request execution) to avoid duplication between capture and replay scripts.
 - **Session replay**: For each recorded session, send the HTTP request as captured, then compare the response to the stored expectation. Use tolerance rules for inherently variable fields (timestamps, UUIDs) but avoid direct DB manipulation.
 - **Cleanup**: Do not modify or delete database rows during tests. Rely on the replayed responses for validation.

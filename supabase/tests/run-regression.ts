@@ -32,8 +32,6 @@ type RuntimeConfig = {
     sessionPath: string
     baseUrl: string
     anonKey: string
-    email: string
-    password: string
     stopOnFailure: boolean
 }
 
@@ -54,7 +52,7 @@ const PLACEHOLDER_REGEXP = /\{\{var:([A-Z0-9_:-]+)\}\}/g
 
 function loadConfig(): RuntimeConfig {
     const args = parse(Deno.args, {
-        string: ['session', 'base-url', 'anon-key', 'email', 'password'],
+        string: ['session', 'base-url', 'anon-key'],
         boolean: ['stop-on-failure'],
         default: { 'stop-on-failure': false }
     })
@@ -67,13 +65,9 @@ function loadConfig(): RuntimeConfig {
 
     const baseUrl = (args['base-url'] as string | undefined) ?? Deno.env.get('REGRESSION_BASE_URL') ?? 'https://wqidjkpfdrvomfkmefqc.supabase.co'
     const anonKey = (args['anon-key'] as string | undefined) ?? Deno.env.get('SUPABASE_ANON_KEY') ?? ''
-    const email = (args.email as string | undefined) ?? Deno.env.get('REGRESSION_EMAIL') ?? ''
-    const password = (args.password as string | undefined) ?? Deno.env.get('REGRESSION_PASSWORD') ?? ''
 
     const missing: string[] = []
     if (!anonKey) missing.push('--anon-key or SUPABASE_ANON_KEY')
-    if (!email) missing.push('--email or REGRESSION_EMAIL')
-    if (!password) missing.push('--password or REGRESSION_PASSWORD')
     if (missing.length > 0) {
         console.error(`Error: Missing required configuration: ${missing.join(', ')}`)
         Deno.exit(1)
@@ -83,17 +77,15 @@ function loadConfig(): RuntimeConfig {
         sessionPath: resolvePath(sessionPath),
         baseUrl,
         anonKey,
-        email,
-        password,
         stopOnFailure: Boolean(args['stop-on-failure'])
     }
 }
 
-async function signIn(baseUrl: string, anonKey: string, email: string, password: string): Promise<{ client: SupabaseClient; accessToken: string; userId: string }> {
+async function signIn(baseUrl: string, anonKey: string): Promise<{ client: SupabaseClient; accessToken: string; userId: string }> {
     const client = createClient(baseUrl, anonKey, { auth: { persistSession: false } })
-    const result = await client.auth.signInWithPassword({ email, password })
+    const result = await client.auth.signInAnonymously()
     if (result.error || !result.data.session) {
-        console.error('Error: failed to sign in regression user:', result.error?.message ?? 'unknown error')
+        console.error('Error: failed to sign in anonymously:', result.error?.message ?? 'unknown error')
         Deno.exit(1)
     }
     return {
@@ -367,7 +359,7 @@ async function replayRequest(entry: RecordedRequest, config: RuntimeConfig, toke
 async function run() {
     const config = loadConfig()
     const artifact = await loadArtifact(config.sessionPath)
-    const { accessToken, userId } = await signIn(config.baseUrl, config.anonKey, config.email, config.password)
+    const { accessToken, userId } = await signIn(config.baseUrl, config.anonKey)
 
     if (artifact.recordedUserId && artifact.recordedUserId !== userId) {
         console.warn('Warning: replay user does not match recorded user. Recorded:', artifact.recordedUserId, 'Replay:', userId)
