@@ -102,13 +102,19 @@ async function unsetSecrets(options: CaptureOptions) {
     await runCommand('Clearing recording secrets', baseArgs)
 }
 
-function getSupabaseClient() {
-    const url = Deno.env.get('SUPABASE_URL')
-    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    if (!url || !serviceKey) {
-        console.error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in the environment.')
-        Deno.exit(1)
+function ensureEnv(name: string, promptMessage: string): string {
+    const current = Deno.env.get(name)?.trim()
+    if (current) {
+        return current
     }
+    const value = promptValue(promptMessage)
+    Deno.env.set(name, value)
+    return value
+}
+
+function getSupabaseClient() {
+    const url = ensureEnv('SUPABASE_URL', 'Enter SUPABASE_URL (starts with https://...)')
+    const serviceKey = ensureEnv('SUPABASE_SERVICE_ROLE_KEY', 'Enter SUPABASE_SERVICE_ROLE_KEY')
     return createClient(url, serviceKey, { auth: { persistSession: false } })
 }
 
