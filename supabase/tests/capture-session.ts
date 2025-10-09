@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run --allow-run=supabase --allow-env --allow-read --allow-write
 
-import { join } from 'https://deno.land/std@0.224.0/path/mod.ts'
+import { join, dirname, fromFileUrl } from 'https://deno.land/std@0.224.0/path/mod.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 
 type RecordingRow = {
@@ -52,7 +52,8 @@ function resolveOptions(): CaptureOptions {
 
     const sessionTag = slugify(`${new Date().toISOString().slice(0, 10)}-${descriptionInput}`)
     const feature = slugify(descriptionInput) || 'adhoc'
-    const outputDir = join('supabase', 'tests', 'recordings', feature, sessionTag)
+    const scriptDir = dirname(fromFileUrl(import.meta.url))
+    const outputDir = join(scriptDir, 'recordings', feature, sessionTag)
 
     return {
         userId,
