@@ -273,9 +273,16 @@ function replacePathSegments(path: string, map: Map<string, string>): string {
 function isPlainObject(value: unknown): value is Record<string, any> {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
-async function writeArtifact(options: CaptureOptions, artifact: unknown) {
+async function writeArtifact(options: CaptureOptions, artifact: RecordingArtifact) {
     await Deno.mkdir(options.outputDir, { recursive: true })
     const filePath = join(options.outputDir, 'session.json')
+    try {
+        await Deno.remove(filePath)
+    } catch (error) {
+        if (!(error instanceof Deno.errors.NotFound)) {
+            throw error
+        }
+    }
     await Deno.writeTextFile(filePath, JSON.stringify(artifact, null, 2))
     console.log(`Saved recording to ${filePath}`)
 }
