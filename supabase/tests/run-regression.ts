@@ -63,10 +63,11 @@ function loadConfig(): RuntimeConfig {
         Deno.exit(1)
     }
 
-    const baseUrl = (args['base-url'] as string | undefined) ?? Deno.env.get('REGRESSION_BASE_URL') ?? 'https://wqidjkpfdrvomfkmefqc.supabase.co'
+    const baseUrl = (args['base-url'] as string | undefined) ?? Deno.env.get('SUPABASE_BASE_URL') ?? ''
     const anonKey = (args['anon-key'] as string | undefined) ?? Deno.env.get('SUPABASE_ANON_KEY') ?? ''
 
     const missing: string[] = []
+    if (!baseUrl) missing.push('--base-url or SUPABASE_BASE_URL')
     if (!anonKey) missing.push('--anon-key or SUPABASE_ANON_KEY')
     if (missing.length > 0) {
         console.error(`Error: Missing required configuration: ${missing.join(', ')}`)
@@ -365,7 +366,7 @@ async function run() {
         console.warn('Warning: replay user does not match recorded user. Recorded:', artifact.recordedUserId, 'Replay:', userId)
     }
 
-    const runtimeVariables: PlaceholderStore = new Map<string, string>()
+    const runtimeVariables: PlaceholderStore = new Map<string, PlaceholderValue>()
 
     const stats: ReplayStats = { total: artifact.requests.length, passed: 0, failed: 0 }
 

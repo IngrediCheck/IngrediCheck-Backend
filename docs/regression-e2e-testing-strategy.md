@@ -10,6 +10,7 @@ This document defines how we will detect regressions in IngrediCheck’s Supabas
 
 ## 2. Environment Bootstrapping
 - **Supabase CLI + Docker**: Install the CLI, ensure Docker is available, and launch the local stack with `supabase start`. Capture anon/service keys and generated URLs for use during testing.
+- **Environment variables**: Copy `.env.template` to `.env` (or export equivalent variables) and fill in `SUPABASE_BASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` so capture/replay scripts can authenticate automatically.
 - **Schema reset**: Apply project schema via `supabase db reset --file supabase/database/tables.sql` before each run so database structure matches production.
 - **Test credentials**: Use `supabase auth admin createuser` to provision a dedicated regression-test user. Store credentials alongside the Supabase keys in `.env.test`.
 - **Edge functions**: Run both `ingredicheck` and `background` functions with `supabase functions serve ... --env-file .env.test`. Tests will target the standard HTTP endpoints.
