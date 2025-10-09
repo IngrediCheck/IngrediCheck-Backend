@@ -1,0 +1,76 @@
+{
+  "recordingSessionId": "2025-10-09-1144-enter-preferences",
+  "recordedUserId": "a16468df-7a05-4270-b06a-b1958cdfce9d",
+  "exportedAt": "2025-10-09T11:45:25.059Z",
+  "totalEntries": 3,
+  "testCase": "enter-preferences",
+  "requests": [
+    {
+      "recordedAt": "2025-10-09T11:44:59.162145+00:00",
+      "request": {
+        "method": "POST",
+        "path": "/ingredicheck/preferencelists/default",
+        "query": {},
+        "bodyType": "form-data",
+        "body": {
+          "files": [],
+          "fields": {
+            "preference": "No seed oils",
+            "clientActivityId": "880ED61F-9D24-4B68-852B-8CC6A89CAE92"
+          }
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "id": "{{var:ID_001}}",
+          "text": "No seed oils",
+          "result": "success",
+          "annotatedText": "No **seed oils**"
+        }
+      }
+    },
+    {
+      "recordedAt": "2025-10-09T11:45:14.764246+00:00",
+      "request": {
+        "method": "PUT",
+        "path": "/ingredicheck/preferencelists/default/{{var:ID_001}}",
+        "query": {},
+        "bodyType": "form-data",
+        "body": {
+          "files": [],
+          "fields": {
+            "preference": "No seed oils, except peanut oil ",
+            "clientActivityId": "C10FB174-08FE-4365-BD88-EF72376347B8"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "{{var:ID_001}}",
+          "text": "No seed oils, except peanut oil ",
+          "result": "success",
+          "annotatedText": "Avoid **seed oils**, except **peanut oil**"
+        }
+      }
+    },
+    {
+      "recordedAt": "2025-10-09T11:45:20.042213+00:00",
+      "request": {
+        "method": "DELETE",
+        "path": "/ingredicheck/preferencelists/default/{{var:ID_001}}",
+        "query": {},
+        "bodyType": "empty",
+        "body": null
+      },
+      "response": {
+        "status": 204,
+        "body": null
+      }
+    }
+  ],
+  "variables": {
+    "ID_001": "1880"
+  }
+}

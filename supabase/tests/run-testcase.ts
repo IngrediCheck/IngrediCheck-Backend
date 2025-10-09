@@ -1,6 +1,7 @@
 #!/usr/bin/env -S deno run --allow-env --allow-net --allow-read
 
-import { load } from 'https://deno.land/std@0.224.0/dotenv/mod.ts'
+import 'https://deno.land/std@0.224.0/dotenv/load.ts'
+
 import { basename, dirname, join, fromFileUrl } from 'https://deno.land/std@0.224.0/path/mod.ts'
 import { parse } from 'https://deno.land/std@0.224.0/flags/mod.ts'
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
@@ -50,18 +51,7 @@ type PlaceholderValue = {
 type PlaceholderStore = Map<string, PlaceholderValue>
 
 const PLACEHOLDER_REGEXP = /\{\{var:([A-Z0-9_:-]+)\}\}/g
-const scriptDir = dirname(fromFileUrl(import.meta.url))
-const projectEnvPath = join(scriptDir, '..', '.env')
-
-try {
-    await load({ export: true, path: projectEnvPath })
-} catch (error) {
-    if (!(error instanceof Deno.errors.NotFound)) {
-        console.warn(`Warning: Failed to load .env from ${projectEnvPath}:`, error)
-    }
-}
-
-const TESTCASES_ROOT = join(scriptDir, 'testcases')
+const TESTCASES_ROOT = join(dirname(fromFileUrl(import.meta.url)), 'testcases')
 
 type TestCase = {
     slug: string

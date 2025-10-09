@@ -1,6 +1,7 @@
 #!/usr/bin/env -S deno run --allow-run=supabase --allow-env --allow-read --allow-write --allow-net
 
-import { load } from 'https://deno.land/std@0.224.0/dotenv/mod.ts'
+import 'https://deno.land/std@0.224.0/dotenv/load.ts'
+
 import { join, dirname, fromFileUrl } from 'https://deno.land/std@0.224.0/path/mod.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 
@@ -34,17 +35,6 @@ function promptValue(message: string, fallback?: string): string {
     return input
 }
 
-const scriptDir = dirname(fromFileUrl(import.meta.url))
-const projectEnvPath = join(scriptDir, '..', '.env')
-
-try {
-    await load({ export: true, path: projectEnvPath })
-} catch (error) {
-    if (!(error instanceof Deno.errors.NotFound)) {
-        console.warn(`Warning: Failed to load .env from ${projectEnvPath}:`, error)
-    }
-}
-
 function ensureEnvVar(name: string, promptMessage: string): string {
     const current = Deno.env.get(name)?.trim()
     if (current) {
@@ -75,6 +65,7 @@ function resolveOptions(): CaptureOptions {
     const timePart = now.toISOString().slice(11, 16).replace(':', '')
     const sessionTag = slugify(`${datePart}-${timePart}-${testCaseInput}`)
     const testCaseSlug = slugify(testCaseInput) || 'adhoc'
+    const scriptDir = dirname(fromFileUrl(import.meta.url))
     const recordingsDir = join(scriptDir, 'testcases')
     const outputFile = join(recordingsDir, `${testCaseSlug}.json`)
 
