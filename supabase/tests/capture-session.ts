@@ -48,7 +48,10 @@ function resolveOptions(): CaptureOptions {
         descriptionParts.join(' ').trim() ||
         promptValue('Describe the scenario being recorded (natural language)')
 
-    const sessionTag = slugify(`${new Date().toISOString().slice(0, 10)}-${descriptionInput}`)
+    const now = new Date()
+    const datePart = now.toISOString().slice(0, 10)
+    const timePart = now.toISOString().slice(11, 16).replace(':', '')
+    const sessionTag = slugify(`${datePart}-${timePart}-${descriptionInput}`)
     const feature = slugify(descriptionInput) || 'adhoc'
     const scriptDir = dirname(fromFileUrl(import.meta.url))
     const outputDir = join(scriptDir, 'recordings', feature, sessionTag)
