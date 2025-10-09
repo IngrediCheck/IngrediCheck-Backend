@@ -1,7 +1,6 @@
 #!/usr/bin/env -S deno run --allow-env --allow-net --allow-read
 
-import 'https://deno.land/std@0.224.0/dotenv/load.ts'
-
+import { load } from 'https://deno.land/std@0.224.0/dotenv/mod.ts'
 import { basename, dirname, join, fromFileUrl } from 'https://deno.land/std@0.224.0/path/mod.ts'
 import { parse } from 'https://deno.land/std@0.224.0/flags/mod.ts'
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
@@ -50,8 +49,32 @@ type PlaceholderValue = {
 
 type PlaceholderStore = Map<string, PlaceholderValue>
 
+const scriptDir = dirname(fromFileUrl(import.meta.url))
+const envCandidates = [
+    join(scriptDir, '..', '..', '.env'),
+    join(scriptDir, '..', '.env'),
+    join(scriptDir, '.env')
+]
+
+let envLoaded = false
+for (const candidate of envCandidates) {
+    try {
+        await load({ export: true, path: candidate })
+        envLoaded = true
+        break
+    } catch (error) {
+        if (!(error instanceof Deno.errors.NotFound)) {
+            console.warn(`Warning: Failed to load .env from ${candidate}:`, error)
+        }
+    }
+}
+
+if (!envLoaded) {
+    console.warn('Warning: No .env file found for run-testcase script. Ensure environment variables are set.')
+}
+
 const PLACEHOLDER_REGEXP = /\{\{var:([A-Z0-9_:-]+)\}\}/g
-const TESTCASES_ROOT = join(dirname(fromFileUrl(import.meta.url)), 'testcases')
+const TESTCASES_ROOT = join(scriptDir, 'testcases')
 
 type TestCase = {
     slug: string
