@@ -1,4 +1,4 @@
-import { Application, Router } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
+import { Application, Router, Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 import { createClient } from '@supabase/supabase-js'
 import * as KitchenSink from '../shared/kitchensink.ts'
 import * as Analyzer from './analyzer.ts'
@@ -10,6 +10,11 @@ import * as Lists from './lists.ts'
 import * as PreferenceList from './preferencelist.ts'
 
 const app = new Application()
+const supabaseServiceUrl = Deno.env.get('SUPABASE_URL') ?? ''
+const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+const supabaseServiceClient = supabaseServiceUrl && supabaseServiceRoleKey
+    ? createClient(supabaseServiceUrl, supabaseServiceRoleKey)
+    : null
 
 app.use((ctx, next) => {
     ctx.state.supabaseClient = createClient(
@@ -22,6 +27,167 @@ app.use((ctx, next) => {
     )
     ctx.state.activityId = crypto.randomUUID()
     return next()
+})
+
+type CapturedBody =
+    | { type: 'json'; payload: unknown }
+    | { type: 'form-data'; payload: { fields: Record<string, unknown>; files: Array<Record<string, unknown>> } }
+    | { type: 'text'; payload: string }
+    | { type: 'bytes'; payload: string }
+    | { type: 'empty'; payload: null }
+
+function toBase64(bytes: Uint8Array): string {
+    let binary = ''
+    for (const byte of bytes) {
+        binary += String.fromCharCode(byte)
+    }
+    return btoa(binary)
+}
+
+function captureRequestBody(ctx: Context, container: { body: CapturedBody | null }) {
+    if (ctx.state.__recordingBodyPatched) {
+        return
+    }
+
+    ctx.state.__recordingBodyPatched = true
+    const originalBody = ctx.request.body.bind(ctx.request)
+
+    ctx.request.body = (...args: unknown[]) => {
+        const body = originalBody(...args)
+
+        switch (body.type) {
+            case 'json': {
+                const valuePromise = Promise.resolve(body.value)
+                body.value = valuePromise.then((value: unknown) => {
+                    container.body = { type: 'json', payload: value }
+                    return value
+                })
+                break
+            }
+            case 'form-data': {
+                const reader = body.value
+                if (reader?.read) {
+                    const originalRead = reader.read.bind(reader)
+                    reader.read = async (...readArgs: unknown[]) => {
+                        const result = await originalRead(...readArgs)
+                        const files = (result.files ?? []).map((file: Record<string, unknown>) => {
+                            const content = file?.content
+                            const normalized = { ...file }
+                            if (content instanceof Uint8Array) {
+                                normalized.content = toBase64(content)
+                            }
+                            return normalized
+                        })
+                        container.body = {
+                            type: 'form-data',
+                            payload: {
+                                fields: result.fields ?? {},
+                                files
+                            }
+                        }
+                        return result
+                    }
+                }
+                break
+            }
+            case 'text': {
+                const valuePromise = Promise.resolve(body.value)
+                body.value = valuePromise.then((value: string) => {
+                    container.body = { type: 'text', payload: value }
+                    return value
+                })
+                break
+            }
+            case 'bytes': {
+                const valuePromise = Promise.resolve(body.value)
+                body.value = valuePromise.then((value: Uint8Array) => {
+                    container.body = { type: 'bytes', payload: toBase64(value) }
+                    return value
+                })
+                break
+            }
+            default:
+                container.body = { type: 'empty', payload: null }
+                break
+        }
+
+        return body
+    }
+}
+
+function headersToObject(headers: Headers): Record<string, string> {
+    const result: Record<string, string> = {}
+    for (const [key, value] of headers.entries()) {
+        result[key] = value
+    }
+    return result
+}
+
+function serializeResponseBody(body: unknown): unknown {
+    if (body === undefined || body === null) return body
+    if (body instanceof Uint8Array) {
+        return { type: 'bytes', value: toBase64(body) }
+    }
+    if (typeof body === 'string') {
+        return { type: 'text', value: body }
+    }
+    try {
+        return JSON.parse(JSON.stringify(body))
+    } catch (_error) {
+        return String(body)
+    }
+}
+
+app.use(async (ctx, next) => {
+    const recordingUserId = Deno.env.get('RECORDING_USER_ID') ?? ''
+    const recordingSessionId = Deno.env.get('RECORDING_SESSION_ID') ?? ''
+    const shouldCapture = Boolean(recordingUserId && recordingSessionId && supabaseServiceClient)
+
+    if (!shouldCapture) {
+        return next()
+    }
+
+    let userId: string | null = null
+    try {
+        userId = await KitchenSink.getUserId(ctx)
+    } catch (_error) {
+        userId = null
+    }
+
+    if (userId !== recordingUserId) {
+        return next()
+    }
+
+    const bodyContainer: { body: CapturedBody | null } = { body: null }
+    const requestHeaders = headersToObject(ctx.request.headers)
+
+    captureRequestBody(ctx, bodyContainer)
+
+    await next()
+
+    const responseHeaders = headersToObject(ctx.response.headers)
+    const responseBody = serializeResponseBody(ctx.response.body)
+    const requestBodyPayload = bodyContainer.body ?? { type: 'empty', payload: null }
+
+    try {
+        await supabaseServiceClient.from('recorded_sessions').insert({
+            recording_session_id: recordingSessionId,
+            user_id: userId,
+            request_method: ctx.request.method,
+            request_path: ctx.request.url.pathname,
+            request_headers: requestHeaders,
+            request_body: {
+                type: requestBodyPayload.type,
+                payload: requestBodyPayload.payload,
+                search: Object.fromEntries(ctx.request.url.searchParams.entries())
+            },
+            response_status: ctx.response.status,
+            response_headers: responseHeaders,
+            response_body: responseBody
+        })
+    } catch (error) {
+        console.error('Failed to insert recorded session entry', error)
+    }
 })
 
 const router = new Router()
