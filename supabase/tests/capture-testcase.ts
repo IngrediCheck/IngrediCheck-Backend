@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run --allow-run=supabase --allow-env --allow-read --allow-write --allow-net
 
-import { load } from 'https://deno.land/std@0.224.0/dotenv/mod.ts'
+
 import { join, dirname, fromFileUrl } from 'https://deno.land/std@0.224.0/path/mod.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 
@@ -32,10 +32,30 @@ const envCandidates = [
     join(scriptDir, '.env')
 ]
 
+async function loadEnvFile(path: string): Promise<Record<string, string>> {
+    const text = await Deno.readTextFile(path)
+    const env: Record<string, string> = {}
+    for (const line of text.split('\n')) {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('#')) continue
+        const equalIndex = trimmed.indexOf('=')
+        if (equalIndex === -1) continue
+        const key = trimmed.substring(0, equalIndex).trim()
+        const value = trimmed.substring(equalIndex + 1).trim()
+        if (key) {
+            env[key] = value
+        }
+    }
+    return env
+}
+
 let envLoaded = false
 for (const candidate of envCandidates) {
     try {
-        await load({ export: true, path: candidate })
+        const env = await loadEnvFile(candidate)
+        for (const [key, value] of Object.entries(env)) {
+            Deno.env.set(key, value)
+        }
         envLoaded = true
         console.log(`Loaded environment variables from ${candidate}`)
         break
@@ -64,9 +84,14 @@ function ensureEnvVar(name: string, promptMessage: string): string {
     if (current) {
         return current
     }
-    const value = promptValue(promptMessage)
-    Deno.env.set(name, value)
-    return value
+    // Only prompt if .env wasn't loaded successfully
+    if (!envLoaded) {
+        const value = promptValue(promptMessage)
+        Deno.env.set(name, value)
+        return value
+    }
+    console.error(`Error: Environment variable ${name} not found despite .env being loaded.`)
+    Deno.exit(1)
 }
 
 function slugify(value: string): string {
