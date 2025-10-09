@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-run=supabase --allow-env --allow-read --allow-write
+#!/usr/bin/env -S deno run --allow-run=supabase --allow-env --allow-read --allow-write --allow-net
 
 import { join, dirname, fromFileUrl } from 'https://deno.land/std@0.224.0/path/mod.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
