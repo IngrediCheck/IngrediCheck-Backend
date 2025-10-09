@@ -2,9 +2,10 @@
 import { Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 import * as DB from '../shared/db.ts'
 import { ingredientAnalyzerAgent } from '../shared/llm/ingredientanalyzeragent.ts'
+import { fetchOpenFoodFactsProduct } from '../shared/openfoodfacts.ts'
 
 declare const EdgeRuntime: {
-  waitUntil(promise: Promise<any>): void;
+  waitUntil(promise: Promise<unknown>): void;
 };
 
 const MB = 1024 * 1024
@@ -12,7 +13,7 @@ const MB = 1024 * 1024
 export async function analyze(ctx: Context) {
 
     const startTime = new Date()
-    let requestBody: any = {}
+    let requestBody: Record<string, unknown> = {}
     let product = DB.defaultProduct()
 
     try {
@@ -20,27 +21,15 @@ export async function analyze(ctx: Context) {
         const formData = await body.value.read({ maxSize: 10 * MB })
 
         requestBody = {
-            barcode: formData.fields['barcode'],
-            userPreferenceText: formData.fields['userPreferenceText'],
-            clientActivityId: formData.fields['clientActivityId']
+            barcode: formData.fields['barcode'] as string | undefined,
+            userPreferenceText: formData.fields['userPreferenceText'] as string | undefined,
+            clientActivityId: formData.fields['clientActivityId'] as string | undefined
         }
 
         ctx.state.clientActivityId = requestBody.clientActivityId
 
         if (requestBody.barcode !== undefined) {
-            const result = await ctx.state.supabaseClient
-                .from('log_inventory')
-                .select()
-                .eq('barcode', requestBody.barcode)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .single()
-
-            if (result.error) {
-                throw result.error
-            }
-
-            product = result.data as DB.Product
+            product = await fetchOpenFoodFactsProduct(requestBody.barcode as string)
         } else {
             const result = await ctx.state.supabaseClient
                 .from('log_extract')
@@ -64,13 +53,14 @@ export async function analyze(ctx: Context) {
         }
 
         // Skip analyzer agent if user has no preferences set
-        const hasValidPreferences = requestBody.userPreferenceText && 
-                                    requestBody.userPreferenceText.trim() !== "" && 
-                                    requestBody.userPreferenceText.trim().toLowerCase() !== "none"
+        const userPreferenceText = requestBody.userPreferenceText as string | undefined
+        const hasValidPreferences = userPreferenceText && 
+                                    userPreferenceText.trim() !== "" && 
+                                    userPreferenceText.trim().toLowerCase() !== "none"
         
         const ingredientRecommendations =
             product.ingredients && product.ingredients.length !== 0 && hasValidPreferences
-                ? await ingredientAnalyzerAgent(ctx, product, requestBody.userPreferenceText)
+                ? await ingredientAnalyzerAgent(ctx, product, userPreferenceText!)
                 : []
 
         ctx.response.status = 200
