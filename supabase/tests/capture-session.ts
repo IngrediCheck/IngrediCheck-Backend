@@ -28,9 +28,9 @@ type CaptureOptions = {
 }
 
 const args = parse(Deno.args, {
-    string: ['user', 'session', 'feature', 'function', 'output'],
+    string: ['user', 'description', 'function', 'output'],
     boolean: ['function-scope', 'skip-unset'],
-    default: { feature: 'adhoc', 'function-scope': false, 'skip-unset': false }
+    default: { 'function-scope': false, 'skip-unset': false }
 })
 
 async function promptValue(message: string, fallback?: string): Promise<string> {
@@ -42,10 +42,20 @@ async function promptValue(message: string, fallback?: string): Promise<string> 
     return input
 }
 
+function slugify(value: string): string {
+    return value
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+}
+
 function resolveOptions(): CaptureOptions {
     const userId = args.user ?? promptValue('Enter the user id to record')
-    const sessionTag = args.session ?? promptValue('Enter a unique recording session id')
-    const feature = args.feature ?? 'adhoc'
+    const description = args.description ?? promptValue('Describe the scenario being recorded (natural language)')
+
+    const sessionTag = slugify(`${new Date().toISOString().slice(0, 10)}-${description}`)
+    const feature = slugify(description) || 'adhoc'
     const functionName = args.function
     const scope = args['function-scope'] ? 'function' as const : 'project' as const
     const outputDir = args.output ?? join('supabase', 'tests', 'recordings', feature, sessionTag)
