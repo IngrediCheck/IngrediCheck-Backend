@@ -1,5 +1,7 @@
 #!/usr/bin/env -S deno run --allow-env --allow-net --allow-read
 
+import 'https://deno.land/std@0.224.0/dotenv/load.ts'
+
 import { basename, resolve as resolvePath } from 'https://deno.land/std@0.224.0/path/mod.ts'
 import { parse } from 'https://deno.land/std@0.224.0/flags/mod.ts'
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
