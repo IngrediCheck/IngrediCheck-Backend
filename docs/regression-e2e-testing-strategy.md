@@ -53,12 +53,12 @@ Position recordings around representative user journeys. Because validation is r
 
 ## 8. Implementation Checklist
 1. Recording automation  
-   - [ ] (1.1) Create persistent storage (e.g., `recorded_sessions` table) capturing `recording_session_id`, `user_id`, timestamp, request payload, and response payload to enable deterministic replay exports.  
-   - [ ] (1.2) Add middleware in `supabase/functions/ingredicheck/index.ts` to log requests/responses whenever `RECORDING_USER_ID` matches the caller, stamping each entry with `recording_session_id = RECORDING_SESSION_ID`.  
-   - [ ] (1.3) Implement the capture scaffold in `supabase/tests/capture-session.ts` so it sets secrets, prompts the operator, exports the captured session into `supabase/tests/recordings/.../session.json`, and unsets secrets.  
+   - [x] (1.1) Create persistent storage (e.g., `recorded_sessions` table) capturing `recording_session_id`, `user_id`, timestamp, request payload, and response payload to enable deterministic replay exports.  
+   - [x] (1.2) Add middleware in `supabase/functions/ingredicheck/index.ts` to log requests/responses whenever `RECORDING_USER_ID` matches the caller, stamping each entry with `recording_session_id = RECORDING_SESSION_ID`.  
+   - [x] (1.3) Implement the capture scaffold in `supabase/tests/capture-session.ts` so it sets secrets, prompts the operator, exports the captured session into `supabase/tests/recordings/.../session.json`, and unsets secrets.  
 
 2. Regression testing automation  
-   - [ ] (2.1) Build the regression runner in `supabase/tests/run-regression.ts`, allowing the backend base URL to be provided (local or remote).  
+   - [x] (2.1) Build the regression runner in `supabase/tests/run-regression.ts`, allowing the backend base URL to be provided (local or remote).  
    - [ ] (2.2) Share reusable helpers in `supabase/tests/shared/setup.ts` (Supabase client creation, auth, header assembly).  
    - [ ] (2.3) Add a `deno task test:regression` entry that invokes the runner script.  
    - [ ] (2.4) Configure GitHub Actions workflow to execute regression tests with Docker-enabled Supabase CLI.  
