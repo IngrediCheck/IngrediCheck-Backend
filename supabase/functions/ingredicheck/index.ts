@@ -115,14 +115,6 @@ function captureRequestBody(ctx: Context, container: { body: CapturedBody | null
     }
 }
 
-function headersToObject(headers: Headers): Record<string, string> {
-    const result: Record<string, string> = {}
-    for (const [key, value] of headers.entries()) {
-        result[key] = value
-    }
-    return result
-}
-
 function serializeResponseBody(body: unknown): unknown {
     if (body === undefined || body === null) return body
     if (body instanceof Uint8Array) {
@@ -159,13 +151,11 @@ app.use(async (ctx, next) => {
     }
 
     const bodyContainer: { body: CapturedBody | null } = { body: null }
-    const requestHeaders = headersToObject(ctx.request.headers)
 
     captureRequestBody(ctx, bodyContainer)
 
     await next()
 
-    const responseHeaders = headersToObject(ctx.response.headers)
     const responseBody = serializeResponseBody(ctx.response.body)
     const requestBodyPayload = bodyContainer.body ?? { type: 'empty', payload: null }
 
@@ -175,14 +165,12 @@ app.use(async (ctx, next) => {
             user_id: userId,
             request_method: ctx.request.method,
             request_path: ctx.request.url.pathname,
-            request_headers: requestHeaders,
             request_body: {
                 type: requestBodyPayload.type,
                 payload: requestBodyPayload.payload,
                 search: Object.fromEntries(ctx.request.url.searchParams.entries())
             },
             response_status: ctx.response.status,
-            response_headers: responseHeaders,
             response_body: responseBody
         })
     } catch (error) {

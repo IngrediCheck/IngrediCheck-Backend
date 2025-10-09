@@ -9,10 +9,8 @@ type RecordingRow = {
     recorded_at: string
     request_method: string
     request_path: string
-    request_headers: Record<string, string>
     request_body: { type: string; payload: unknown; search?: Record<string, string> } | null
     response_status: number
-    response_headers: Record<string, string>
     response_body: unknown
 }
 
@@ -144,14 +142,12 @@ function buildArtifact(options: CaptureOptions, rows: RecordingRow[]) {
             request: {
                 method: row.request_method,
                 path: row.request_path,
-                headers: row.request_headers ?? {},
                 query: row.request_body?.search ?? {},
                 bodyType: row.request_body?.type ?? 'empty',
                 body: row.request_body?.payload ?? null
             },
             response: {
                 status: row.response_status,
-                headers: row.response_headers ?? {},
                 body: row.response_body
             }
         }))
