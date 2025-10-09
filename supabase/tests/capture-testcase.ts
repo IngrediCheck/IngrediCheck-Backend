@@ -19,10 +19,10 @@ type RecordingRow = {
 type CaptureOptions = {
     userId: string
     sessionTag: string
-    feature: string
+    testCase: string
     functionName?: string
     scope: 'project' | 'function'
-    outputDir: string
+    outputFile: string
     skipUnset: boolean
 }
 
@@ -54,27 +54,28 @@ function slugify(value: string): string {
 }
 
 function resolveOptions(): CaptureOptions {
-    const [userArg, ...descriptionParts] = Deno.args
+    const [userArg, ...testCaseParts] = Deno.args
     const userId = userArg?.trim() || promptValue('Enter the user id to record')
-    const descriptionInput =
-        descriptionParts.join(' ').trim() ||
-        promptValue('Describe the scenario being recorded (natural language)')
+    const testCaseInput =
+        testCaseParts.join(' ').trim() ||
+        promptValue('Name the test case being recorded')
 
     const now = new Date()
     const datePart = now.toISOString().slice(0, 10)
     const timePart = now.toISOString().slice(11, 16).replace(':', '')
-    const sessionTag = slugify(`${datePart}-${timePart}-${descriptionInput}`)
-    const feature = slugify(descriptionInput) || 'adhoc'
+    const sessionTag = slugify(`${datePart}-${timePart}-${testCaseInput}`)
+    const testCaseSlug = slugify(testCaseInput) || 'adhoc'
     const scriptDir = dirname(fromFileUrl(import.meta.url))
-    const outputDir = join(scriptDir, 'recordings', feature, sessionTag)
+    const recordingsDir = join(scriptDir, 'testcases')
+    const outputFile = join(recordingsDir, `${testCaseSlug}.json`)
 
     return {
         userId,
         sessionTag,
-        feature,
+        testCase: testCaseSlug,
         functionName: undefined,
         scope: 'project',
-        outputDir,
+        outputFile,
         skipUnset: false
     }
 }
@@ -141,6 +142,7 @@ type RecordingArtifact = {
     recordedUserId: string
     exportedAt: string
     totalEntries: number
+    testCase?: string
     variables?: Record<string, string>
     requests: Array<{
         recordedAt: string
@@ -164,6 +166,7 @@ function buildArtifact(options: CaptureOptions, rows: RecordingRow[]): Recording
         recordedUserId: options.userId,
         exportedAt: new Date().toISOString(),
         totalEntries: rows.length,
+        testCase: options.testCase,
         requests: rows.map((row) => ({
             recordedAt: row.recorded_at,
             request: {
@@ -279,8 +282,8 @@ function isPlainObject(value: unknown): value is Record<string, any> {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 async function writeArtifact(options: CaptureOptions, artifact: RecordingArtifact) {
-    await Deno.mkdir(options.outputDir, { recursive: true })
-    const filePath = join(options.outputDir, 'session.json')
+    await Deno.mkdir(dirname(options.outputFile), { recursive: true })
+    const filePath = options.outputFile
     try {
         await Deno.remove(filePath)
     } catch (error) {

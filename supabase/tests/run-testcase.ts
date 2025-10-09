@@ -2,7 +2,7 @@
 
 import 'https://deno.land/std@0.224.0/dotenv/load.ts'
 
-import { basename, resolve as resolvePath } from 'https://deno.land/std@0.224.0/path/mod.ts'
+import { basename, dirname, join, fromFileUrl } from 'https://deno.land/std@0.224.0/path/mod.ts'
 import { parse } from 'https://deno.land/std@0.224.0/flags/mod.ts'
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 
@@ -11,6 +11,7 @@ type RecordingArtifact = {
     recordedUserId: string
     exportedAt: string
     totalEntries: number
+    testCase?: string
     variables?: Record<string, string>
     requests: RecordedRequest[]
 }
@@ -31,7 +32,6 @@ type RecordedRequest = {
 }
 
 type RuntimeConfig = {
-    sessionPath: string
     baseUrl: string
     anonKey: string
     stopOnFailure: boolean
@@ -51,19 +51,97 @@ type PlaceholderValue = {
 type PlaceholderStore = Map<string, PlaceholderValue>
 
 const PLACEHOLDER_REGEXP = /\{\{var:([A-Z0-9_:-]+)\}\}/g
+const TESTCASES_ROOT = join(dirname(fromFileUrl(import.meta.url)), 'testcases')
+
+type TestCase = {
+    slug: string
+    displayName: string
+    filePath: string
+}
+
+type Tokens = {
+    accessToken: string
+    anonKey: string
+    userId: string
+}
+
+function formatTestCaseName(slug: string): string {
+    const words = slug.split(/[-_]+/).filter(Boolean)
+    if (words.length === 0) {
+        return slug
+    }
+    return words
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ')
+}
+
+async function discoverTestCases(): Promise<TestCase[]> {
+    const cases: TestCase[] = []
+    try {
+        for await (const entry of Deno.readDir(TESTCASES_ROOT)) {
+            if (!entry.isFile || !entry.name.endsWith('.json')) continue
+            const slug = entry.name.replace(/\.json$/, '')
+            cases.push({
+                slug,
+                displayName: formatTestCaseName(slug),
+                filePath: join(TESTCASES_ROOT, entry.name)
+            })
+        }
+    } catch (error) {
+        if (!(error instanceof Deno.errors.NotFound)) {
+            throw error
+        }
+    }
+
+    cases.sort((a, b) => a.displayName.localeCompare(b.displayName))
+    return cases
+}
+
+function promptTestCaseSelection(cases: TestCase[]): TestCase[] {
+    if (cases.length === 0) {
+        console.error('Error: No recorded regression test cases were found under supabase/tests/testcases.')
+        Deno.exit(1)
+    }
+
+    if (cases.length === 1) {
+        console.log(`Only one test case found. Running: ${cases[0].displayName}`)
+        return cases
+    }
+
+    const allOption = cases.length + 1
+
+    while (true) {
+        console.log('\nAvailable regression test cases:')
+        cases.forEach((testCase, index) => {
+            console.log(`  ${index + 1}. ${testCase.displayName}`)
+        })
+        console.log(`  ${allOption}. All test cases`)
+
+        const input = prompt(`Select a test case (1-${allOption}):`)?.trim() ?? ''
+        const numeric = Number.parseInt(input, 10)
+        if (Number.isNaN(numeric)) {
+            if (input.toLowerCase() === 'all') {
+                return cases
+            }
+            console.error('Please enter a valid number.')
+            continue
+        }
+        if (numeric === allOption) {
+            return cases
+        }
+        if (numeric >= 1 && numeric <= cases.length) {
+            return [cases[numeric - 1]]
+        }
+        console.error(`Please enter a number between 1 and ${allOption}.`)
+    }
+}
 
 function loadConfig(): RuntimeConfig {
     const args = parse(Deno.args, {
-        string: ['session', 'base-url', 'anon-key'],
+        string: ['base-url', 'anon-key'],
         boolean: ['stop-on-failure'],
         default: { 'stop-on-failure': false }
     })
-
-    const sessionPath = (args.session ?? args._[0]) as string | undefined
-    if (!sessionPath) {
-        console.error('Error: --session <path> (or positional path) is required.')
-        Deno.exit(1)
-    }
 
     const baseUrl = (args['base-url'] as string | undefined) ?? Deno.env.get('SUPABASE_BASE_URL') ?? ''
     const anonKey = (args['anon-key'] as string | undefined) ?? Deno.env.get('SUPABASE_ANON_KEY') ?? ''
@@ -77,7 +155,6 @@ function loadConfig(): RuntimeConfig {
     }
 
     return {
-        sessionPath: resolvePath(sessionPath),
         baseUrl,
         anonKey,
         stopOnFailure: Boolean(args['stop-on-failure'])
@@ -308,7 +385,7 @@ function compareBodies(expected: unknown, actual: unknown, variables: Placeholde
     }
 }
 
-async function replayRequest(entry: RecordedRequest, config: RuntimeConfig, tokens: { accessToken: string; anonKey: string }, variables: PlaceholderStore): Promise<{ ok: boolean; errors: string[]; response: Response; body: unknown }> {
+async function replayRequest(entry: RecordedRequest, config: RuntimeConfig, tokens: Tokens, variables: PlaceholderStore): Promise<{ ok: boolean; errors: string[]; response: Response; body: unknown }> {
     const resolvedPath = resolvePlaceholdersInPath(entry.request.path, variables)
     const queryParams = resolvePlaceholdersInQuery(entry.request.query ?? {}, variables)
 
@@ -359,27 +436,27 @@ async function replayRequest(entry: RecordedRequest, config: RuntimeConfig, toke
     return { ok: errors.length === 0, errors, response, body: parsedBody }
 }
 
-async function run() {
-    const config = loadConfig()
-    const artifact = await loadArtifact(config.sessionPath)
-    const { accessToken, userId } = await signIn(config.baseUrl, config.anonKey)
+async function replayArtifact(sessionPath: string, testCaseName: string, config: RuntimeConfig, tokens: Tokens): Promise<{ stats: ReplayStats; aborted: boolean }> {
+    const artifact = await loadArtifact(sessionPath)
 
-    if (artifact.recordedUserId && artifact.recordedUserId !== userId) {
-        console.warn('Warning: replay user does not match recorded user. Recorded:', artifact.recordedUserId, 'Replay:', userId)
+    if (artifact.recordedUserId && artifact.recordedUserId !== tokens.userId) {
+        console.warn('Warning: replay user does not match recorded user. Recorded:', artifact.recordedUserId, 'Replay:', tokens.userId)
     }
 
     const runtimeVariables: PlaceholderStore = new Map<string, PlaceholderValue>()
-
     const stats: ReplayStats = { total: artifact.requests.length, passed: 0, failed: 0 }
+    const sessionLabel = `${testCaseName} :: ${basename(sessionPath)}`
 
-    console.log(`Replaying ${stats.total} requests from ${basename(config.sessionPath)} against ${config.baseUrl}`)
+    console.log(`\nReplaying ${stats.total} request(s) for ${sessionLabel} against ${config.baseUrl}`)
+
+    let aborted = false
 
     for (let index = 0; index < artifact.requests.length; index += 1) {
         const step = artifact.requests[index]
         const label = `${index + 1}/${artifact.requests.length} ${step.request.method.toUpperCase()} ${step.request.path}`
 
         try {
-            const result = await replayRequest(step, config, { accessToken, anonKey: config.anonKey }, runtimeVariables)
+            const result = await replayRequest(step, config, tokens, runtimeVariables)
             if (result.ok) {
                 stats.passed += 1
                 console.log(`✅ ${label}`)
@@ -390,6 +467,7 @@ async function run() {
                     console.error(`   - ${message}`)
                 }
                 if (config.stopOnFailure) {
+                    aborted = true
                     break
                 }
             }
@@ -398,14 +476,47 @@ async function run() {
             console.error(`❌ ${label}`)
             console.error(`   - Unexpected error: ${error instanceof Error ? error.message : String(error)}`)
             if (config.stopOnFailure) {
+                aborted = true
                 break
             }
         }
     }
 
-    console.log(`Finished. Passed ${stats.passed}/${stats.total}, Failed ${stats.failed}/${stats.total}`)
+    console.log(`Result for ${sessionLabel}: Passed ${stats.passed}/${stats.total}, Failed ${stats.failed}/${stats.total}`)
 
-    if (stats.failed > 0) {
+    return { stats, aborted }
+}
+
+async function run() {
+    const config = loadConfig()
+    const testCases = await discoverTestCases()
+    const selectedCases = promptTestCaseSelection(testCases)
+    const { accessToken, userId } = await signIn(config.baseUrl, config.anonKey)
+    const tokens: Tokens = { accessToken, anonKey: config.anonKey, userId }
+
+    const totals: ReplayStats = { total: 0, passed: 0, failed: 0 }
+
+    for (const testCase of selectedCases) {
+        console.log(`\n=== ${testCase.displayName} ===`)
+
+        const { stats, aborted } = await replayArtifact(testCase.filePath, testCase.displayName, config, tokens)
+        totals.total += stats.total
+        totals.passed += stats.passed
+        totals.failed += stats.failed
+
+        if (config.stopOnFailure && aborted) {
+            console.log('\nStopping early because --stop-on-failure was set and a failure occurred.')
+            console.log(`Overall: Passed ${totals.passed}/${totals.total}, Failed ${totals.failed}/${totals.total}`)
+            if (totals.failed > 0) {
+                Deno.exit(1)
+            }
+            return
+        }
+    }
+
+    console.log(`\nOverall: Passed ${totals.passed}/${totals.total}, Failed ${totals.failed}/${totals.total}`)
+
+    if (totals.failed > 0) {
         Deno.exit(1)
     }
 }

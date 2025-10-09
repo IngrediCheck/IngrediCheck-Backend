@@ -3,6 +3,7 @@
   "recordedUserId": "a16468df-7a05-4270-b06a-b1958cdfce9d",
   "exportedAt": "2025-10-09T11:45:25.059Z",
   "totalEntries": 3,
+  "testCase": "enter-preferences",
   "requests": [
     {
       "recordedAt": "2025-10-09T11:44:59.162145+00:00",
