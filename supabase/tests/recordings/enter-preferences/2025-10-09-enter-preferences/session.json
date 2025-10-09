@@ -22,7 +22,7 @@
       "response": {
         "status": 201,
         "body": {
-          "id": 1874,
+          "id": "{{var:ID_001}}",
           "text": "No seed oils for me",
           "result": "success",
           "annotatedText": "No **seed oils**"
@@ -47,7 +47,7 @@
       "response": {
         "status": 201,
         "body": {
-          "id": 1875,
+          "id": "{{var:ID_002}}",
           "text": "I cannot have milk and milk products",
           "result": "success",
           "annotatedText": "I cannot have **milk** and **milk products**."
@@ -58,7 +58,7 @@
       "recordedAt": "2025-10-09T10:38:31.428976+00:00",
       "request": {
         "method": "DELETE",
-        "path": "/ingredicheck/preferencelists/default/1875",
+        "path": "/ingredicheck/preferencelists/default/{{var:ID_002}}",
         "query": {},
         "bodyType": "empty",
         "body": null
@@ -72,7 +72,7 @@
       "recordedAt": "2025-10-09T10:38:35.116432+00:00",
       "request": {
         "method": "DELETE",
-        "path": "/ingredicheck/preferencelists/default/1874",
+        "path": "/ingredicheck/preferencelists/default/{{var:ID_001}}",
         "query": {},
         "bodyType": "empty",
         "body": null
@@ -100,7 +100,7 @@
       "response": {
         "status": 201,
         "body": {
-          "id": 1876,
+          "id": "{{var:ID_003}}",
           "text": "No seed oils",
           "result": "success",
           "annotatedText": "No **seed oils**"
@@ -125,12 +125,18 @@
       "response": {
         "status": 201,
         "body": {
-          "id": 1877,
+          "id": "{{var:ID_004}}",
           "text": "I can’t have milk and milk products",
           "result": "success",
           "annotatedText": "I can’t have **milk** and **milk products**"
         }
       }
     }
-  ]
+  ],
+  "variables": {
+    "ID_001": "1874",
+    "ID_002": "1875",
+    "ID_003": "1876",
+    "ID_004": "1877"
+  }
 }
