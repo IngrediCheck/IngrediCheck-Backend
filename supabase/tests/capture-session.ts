@@ -1,7 +1,6 @@
 #!/usr/bin/env -S deno run --allow-run=supabase --allow-env --allow-read --allow-write
 
 import { join } from 'https://deno.land/std@0.224.0/path/mod.ts'
-import { parse } from 'https://deno.land/std@0.224.0/flags/mod.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 
 type RecordingRow = {
@@ -27,13 +26,7 @@ type CaptureOptions = {
     skipUnset: boolean
 }
 
-const args = parse(Deno.args, {
-    string: ['user', 'description', 'function', 'output'],
-    boolean: ['function-scope', 'skip-unset'],
-    default: { 'function-scope': false, 'skip-unset': false }
-})
-
-async function promptValue(message: string, fallback?: string): Promise<string> {
+function promptValue(message: string, fallback?: string): string {
     const input = prompt(message, fallback ?? '')?.trim()
     if (!input) {
         console.error(`Aborted: ${message} is required.`)
@@ -51,24 +44,24 @@ function slugify(value: string): string {
 }
 
 function resolveOptions(): CaptureOptions {
-    const userId = args.user ?? promptValue('Enter the user id to record')
-    const description = args.description ?? promptValue('Describe the scenario being recorded (natural language)')
+    const [userArg, ...descriptionParts] = Deno.args
+    const userId = userArg?.trim() || promptValue('Enter the user id to record')
+    const descriptionInput =
+        descriptionParts.join(' ').trim() ||
+        promptValue('Describe the scenario being recorded (natural language)')
 
-    const sessionTag = slugify(`${new Date().toISOString().slice(0, 10)}-${description}`)
-    const feature = slugify(description) || 'adhoc'
-    const functionName = args.function
-    const scope = args['function-scope'] ? 'function' as const : 'project' as const
-    const outputDir = args.output ?? join('supabase', 'tests', 'recordings', feature, sessionTag)
-    const skipUnset = Boolean(args['skip-unset'])
+    const sessionTag = slugify(`${new Date().toISOString().slice(0, 10)}-${descriptionInput}`)
+    const feature = slugify(descriptionInput) || 'adhoc'
+    const outputDir = join('supabase', 'tests', 'recordings', feature, sessionTag)
 
     return {
         userId,
         sessionTag,
         feature,
-        functionName,
-        scope,
+        functionName: undefined,
+        scope: 'project',
         outputDir,
-        skipUnset
+        skipUnset: false
     }
 }
 
@@ -101,10 +94,6 @@ async function setSecrets(options: CaptureOptions) {
 }
 
 async function unsetSecrets(options: CaptureOptions) {
-    if (options.skipUnset) {
-        console.log('Skipping secret cleanup (per --skip-unset). Remember to clear them manually.')
-        return
-    }
     const baseArgs =
         options.scope === 'function'
             ? ['supabase', 'functions', 'secrets', 'unset', 'RECORDING_USER_ID', 'RECORDING_SESSION_ID', '--function', options.functionName ?? 'ingredicheck']
