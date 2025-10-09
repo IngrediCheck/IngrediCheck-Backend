@@ -35,12 +35,10 @@ const envCandidates = [
 let envLoaded = false
 for (const candidate of envCandidates) {
     try {
-        const result = await load({ envPath: candidate, export: true })
-        if (Object.keys(result).length > 0) {
-            envLoaded = true
-            console.log(`Loaded environment variables from ${candidate}`)
-            break
-        }
+        await load({ export: true, path: candidate })
+        envLoaded = true
+        console.log(`Loaded environment variables from ${candidate}`)
+        break
     } catch (error) {
         if (!(error instanceof Deno.errors.NotFound)) {
             console.warn(`Warning: Failed to load .env from ${candidate}:`, error)
