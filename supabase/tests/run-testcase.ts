@@ -8,6 +8,7 @@ import {
   loadEnv,
   signInAnonymously,
 } from "./shared/setup.ts";
+import { loadState } from "./local-env.ts";
 
 type RecordingArtifact = {
   recordingSessionId: string;
@@ -272,18 +273,24 @@ function ensureTrailingSlash(value: string): string {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-function loadConfig(): RuntimeConfig {
+async function loadConfig(): Promise<RuntimeConfig> {
   const args = parse(Deno.args, {
     string: ["base-url", "functions-url", "anon-key"],
     boolean: ["stop-on-failure"],
     default: { "stop-on-failure": false },
   });
 
+  // Try to load local environment state first
+  const localState = await loadState();
+
   const baseUrlInput = (args["base-url"] as string | undefined) ??
+    localState?.baseUrl ??
     Deno.env.get("SUPABASE_BASE_URL") ?? "";
   const anonKey = (args["anon-key"] as string | undefined) ??
+    localState?.anonKey ??
     Deno.env.get("SUPABASE_ANON_KEY") ?? "";
   const functionsUrlInput = (args["functions-url"] as string | undefined) ??
+    localState?.functionsUrl ??
     Deno.env.get("SUPABASE_FUNCTIONS_URL") ??
     `${trimTrailingSlash(baseUrlInput)}/functions/v1`;
 
@@ -295,6 +302,10 @@ function loadConfig(): RuntimeConfig {
       `Error: Missing required configuration: ${missing.join(", ")}`,
     );
     Deno.exit(1);
+  }
+
+  if (localState?.running) {
+    console.log("🔗 Using local Supabase environment");
   }
 
   return {
@@ -1025,7 +1036,7 @@ async function replayArtifact(
 }
 
 async function run() {
-  const config = loadConfig();
+  const config = await loadConfig();
   const testCases = await discoverTestCases();
   const selectedCases = await promptTestCaseSelection(testCases);
 
