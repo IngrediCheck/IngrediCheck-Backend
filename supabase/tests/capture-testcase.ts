@@ -32,6 +32,13 @@ type CaptureOptions = {
   skipUnset: boolean;
 };
 
+type AuthUser = {
+  id: string;
+  created_at: string;
+  email?: string;
+  phone?: string;
+};
+
 const scriptDir = dirname(fromFileUrl(import.meta.url));
 const envLoad = await loadEnv({
   onWarning: (message) => console.warn(message),
@@ -80,12 +87,7 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-function resolveOptions(): CaptureOptions {
-  const [userArg, ...testCaseParts] = Deno.args;
-  const userId = userArg?.trim() || promptValue("Enter the user id to record");
-  const testCaseInput = testCaseParts.join(" ").trim() ||
-    promptValue("Name the test case being recorded");
-
+function resolveOptions(testCaseInput: string): Omit<CaptureOptions, 'userId'> {
   const now = new Date();
   const datePart = now.toISOString().slice(0, 10);
   const timePart = now.toISOString().slice(11, 16).replace(":", "");
@@ -95,7 +97,6 @@ function resolveOptions(): CaptureOptions {
   const outputFile = join(recordingsDir, `${testCaseSlug}.json`);
 
   return {
-    userId,
     sessionTag,
     testCase: testCaseSlug,
     functionName: undefined,
@@ -188,10 +189,56 @@ function getSupabaseClient() {
   });
 }
 
+async function queryNewUsers(
+  client: ReturnType<typeof createSupabaseServiceClient>,
+  sinceTimestamp: string,
+): Promise<AuthUser[]> {
+  const { data, error } = await client.auth.admin.listUsers();
+  
+  if (error) {
+    console.error("Failed to query auth.users:", error);
+    Deno.exit(1);
+  }
+  
+  const sinceDate = new Date(sinceTimestamp);
+  return data.users.filter(user => {
+    const userCreatedAt = new Date(user.created_at);
+    return userCreatedAt > sinceDate;
+  });
+}
+
+async function detectUserFromGuestSignIn(): Promise<string> {
+  const client = getSupabaseClient();
+  
+  while (true) {
+    const timestamp = new Date().toISOString();
+    console.log("\n=== Guest Sign-In Detection ===");
+    console.log("Please perform a GUEST SIGN-IN on your device now, then press Enter...");
+    await prompt("Press Enter after completing guest sign-in...");
+    
+    const newUsers = await queryNewUsers(client, timestamp);
+    
+    if (newUsers.length === 0) {
+      console.error("Error: No new users found after sign-in attempt.");
+      console.error("Please ensure you performed a guest sign-in and try again.");
+      Deno.exit(1);
+    } else if (newUsers.length === 1) {
+      const userId = newUsers[0].id;
+      console.log(`✓ Successfully detected user ID: ${userId}`);
+      return userId;
+    } else {
+      console.warn(`Warning: Multiple sign-ins detected (${newUsers.length} users).`);
+      console.log("Please RESET APP STATE on your device and press Enter...");
+      await prompt("Press Enter after resetting app state...");
+      // Continue the loop with a fresh timestamp
+    }
+  }
+}
+
 async function fetchRecordingRows(sessionTag: string): Promise<RecordingRow[]> {
   const client = getSupabaseClient();
   const { data, error } = await client
-    .from<RecordingRow>("recorded_sessions")
+    .from("recorded_sessions")
     .select()
     .eq("recording_session_id", sessionTag)
     .order("recorded_at", { ascending: true });
@@ -378,7 +425,20 @@ async function writeArtifact(
 }
 
 async function main() {
-  const options = resolveOptions();
+  // Get test case name from command line arguments
+  const testCaseInput = Deno.args.join(" ").trim() || 
+    promptValue("Name the test case being recorded");
+  
+  // Detect user ID automatically
+  const userId = await detectUserFromGuestSignIn();
+  
+  // Resolve other options
+  const baseOptions = resolveOptions(testCaseInput);
+  const options: CaptureOptions = {
+    ...baseOptions,
+    userId,
+  };
+  
   await setSecrets(options);
 
   console.log("\nRecording started.");
