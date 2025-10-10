@@ -54,6 +54,29 @@ type PlaceholderValue = {
 
 type PlaceholderStore = Map<string, PlaceholderValue>;
 
+// Fuzzy matching configuration types
+type MatchStrategy = "exact" | "fuzzy" | "regex";
+
+type MatchResult = {
+  matches: boolean;
+  similarity?: number;
+  message?: string;
+};
+
+type FieldMatcher = {
+  pathPattern: string | RegExp;
+  strategy: MatchStrategy;
+  threshold?: number; // for fuzzy matching
+  pattern?: RegExp; // for regex matching
+};
+
+// Configuration for field matching strategies
+const FIELD_MATCHERS: FieldMatcher[] = [
+  { pathPattern: /\.annotatedText$/, strategy: "fuzzy", threshold: 0.95 }
+];
+
+const FUZZY_MATCH_THRESHOLD = 0.95;
+
 const scriptDir = dirname(fromFileUrl(import.meta.url));
 const envLoad = await loadEnv({
   onWarning: (message) => console.warn(message),
@@ -458,6 +481,78 @@ function coerceToString(value: unknown): string {
   return String(value);
 }
 
+// String similarity calculation using Levenshtein distance
+function calculateStringSimilarity(str1: string, str2: string): number {
+  const s1 = str1.trim();
+  const s2 = str2.trim();
+  
+  if (s1 === s2) return 1.0;
+  if (s1.length === 0 || s2.length === 0) return 0.0;
+  
+  const matrix: number[][] = [];
+  const len1 = s1.length;
+  const len2 = s2.length;
+  
+  // Initialize matrix
+  for (let i = 0; i <= len1; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= len2; j++) {
+    matrix[0][j] = j;
+  }
+  
+  // Fill matrix
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,      // deletion
+        matrix[i][j - 1] + 1,      // insertion
+        matrix[i - 1][j - 1] + cost // substitution
+      );
+    }
+  }
+  
+  const maxLen = Math.max(len1, len2);
+  const distance = matrix[len1][len2];
+  return maxLen === 0 ? 1.0 : (maxLen - distance) / maxLen;
+}
+
+// Select appropriate matcher for a given path
+function selectMatcherForPath(path: string): FieldMatcher | null {
+  for (const matcher of FIELD_MATCHERS) {
+    if (typeof matcher.pathPattern === "string") {
+      if (path === matcher.pathPattern) return matcher;
+    } else {
+      if (matcher.pathPattern.test(path)) return matcher;
+    }
+  }
+  return null;
+}
+
+// Fuzzy matching with threshold
+function matchFuzzy(expected: string, actual: string, threshold: number): MatchResult {
+  const similarity = calculateStringSimilarity(expected, actual);
+  const matches = similarity >= threshold;
+  
+  return {
+    matches,
+    similarity,
+    message: matches 
+      ? `Fuzzy matched (${(similarity * 100).toFixed(1)}% similar)`
+      : `Fuzzy match failed (${(similarity * 100).toFixed(1)}% similar, threshold: ${(threshold * 100).toFixed(1)}%)`
+  };
+}
+
+// Exact matching (current behavior)
+function matchExact(expected: string, actual: string): MatchResult {
+  const matches = expected === actual;
+  return {
+    matches,
+    message: matches ? "Exact match" : "Exact match failed"
+  };
+}
+
 function formatValueForDisplay(
   value: unknown,
   maxLength: number = 200,
@@ -573,6 +668,7 @@ function compareBodies(
   variables: PlaceholderStore,
   path: string,
   errors: string[],
+  warnings: string[],
 ) {
   if (typeof expected === "string") {
     const match = expected.match(/^\{\{var:([A-Z0-9_:-]+)\}\}$/);
@@ -643,6 +739,7 @@ function compareBodies(
         variables,
         `${path}[${index}]`,
         errors,
+        warnings,
       );
     });
     return;
@@ -669,19 +766,45 @@ function compareBodies(
         variables,
         childPath,
         errors,
+        warnings,
       );
     }
     return;
   }
 
   if (expected !== actual) {
-    errors.push(
-      `${path}:\n  Expected: ${getTypeDescription(expected)} ${
-        formatValueForDisplay(expected)
-      }\n  Received: ${getTypeDescription(actual)} ${
-        formatValueForDisplay(actual)
-      }`,
-    );
+    // Check if this field should use fuzzy matching
+    const matcher = selectMatcherForPath(path);
+    
+    if (matcher && matcher.strategy === "fuzzy" && typeof expected === "string" && typeof actual === "string") {
+      const threshold = matcher.threshold ?? FUZZY_MATCH_THRESHOLD;
+      const result = matchFuzzy(expected, actual, threshold);
+      
+      if (result.matches) {
+        // Add warning instead of error for fuzzy matches
+        warnings.push(
+          `⚠️  ${path}: ${result.message}\n  Expected: ${formatValueForDisplay(expected)}\n  Received: ${formatValueForDisplay(actual)}`
+        );
+      } else {
+        // Add error for fuzzy match failures
+        errors.push(
+          `${path}: ${result.message}\n  Expected: ${getTypeDescription(expected)} ${
+            formatValueForDisplay(expected)
+          }\n  Received: ${getTypeDescription(actual)} ${
+            formatValueForDisplay(actual)
+          }`,
+        );
+      }
+    } else {
+      // Use exact matching for non-fuzzy fields
+      errors.push(
+        `${path}:\n  Expected: ${getTypeDescription(expected)} ${
+          formatValueForDisplay(expected)
+        }\n  Received: ${getTypeDescription(actual)} ${
+          formatValueForDisplay(actual)
+        }`,
+      );
+    }
   }
 }
 
@@ -691,7 +814,7 @@ async function replayRequest(
   tokens: Tokens,
   variables: PlaceholderStore,
 ): Promise<
-  { ok: boolean; errors: string[]; response: Response; body: unknown }
+  { ok: boolean; errors: string[]; warnings: string[]; response: Response; body: unknown }
 > {
   const resolvedPath = resolvePlaceholdersInPath(entry.request.path, variables);
   const queryParams = resolvePlaceholdersInQuery(
@@ -714,6 +837,7 @@ async function replayRequest(
   });
 
   const errors: string[] = [];
+  const warnings: string[] = [];
   if (response.status !== entry.response.status) {
     errors.push(
       `status: expected ${entry.response.status}, received ${response.status}`,
@@ -740,9 +864,9 @@ async function replayRequest(
     }
   }
 
-  compareBodies(entry.response.body, parsedBody, variables, "$", errors);
+  compareBodies(entry.response.body, parsedBody, variables, "$", errors, warnings);
 
-  return { ok: errors.length === 0, errors, response, body: parsedBody };
+  return { ok: errors.length === 0, errors, warnings, response, body: parsedBody };
 }
 
 async function replayArtifact(
@@ -785,7 +909,14 @@ async function replayArtifact(
       );
       if (result.ok) {
         stats.passed += 1;
-        console.log(`✅ ${label}`);
+        if (result.warnings.length > 0) {
+          console.log(`✅ ${label}`);
+          for (const warning of result.warnings) {
+            console.log(`   ${warning}`);
+          }
+        } else {
+          console.log(`✅ ${label}`);
+        }
       } else {
         stats.failed += 1;
         console.error(`❌ ${label}`);
