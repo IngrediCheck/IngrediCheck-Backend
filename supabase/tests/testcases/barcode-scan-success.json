@@ -1,0 +1,157 @@
+{
+  "recordingSessionId": "2025-10-09-1718-barcode-scan-success",
+  "recordedUserId": "6da99474-9e3b-412b-ad38-b50706788beb",
+  "exportedAt": "2025-10-09T17:19:22.509Z",
+  "totalEntries": 3,
+  "testCase": "barcode-scan-success",
+  "requests": [
+    {
+      "recordedAt": "2025-10-09T17:19:04.28062+00:00",
+      "request": {
+        "method": "POST",
+        "path": "/ingredicheck/preferencelists/default",
+        "query": {},
+        "bodyType": "form-data",
+        "body": {
+          "files": [],
+          "fields": {
+            "preference": "No seed oils",
+            "clientActivityId": "ED454FA6-8055-433B-9322-B4B1E97557C5"
+          }
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "id": "{{var:ID_001}}",
+          "text": "No seed oils",
+          "result": "success",
+          "annotatedText": "No **seed oils**"
+        }
+      }
+    },
+    {
+      "recordedAt": "2025-10-09T17:19:15.127279+00:00",
+      "request": {
+        "method": "GET",
+        "path": "/ingredicheck/inventory/0044000051716",
+        "query": {
+          "clientActivityId": "8499B838-B136-44C3-B792-02365E3AC585"
+        },
+        "bodyType": "empty",
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "name": "Cracked Pepper And Olive Oil",
+          "brand": "Mondelez Int. US (0074819091009)",
+          "images": [
+            {
+              "url": "https://images.openfoodfacts.org/images/products/004/400/005/1716/front_en.18.400.jpg"
+            },
+            {
+              "url": "https://images.openfoodfacts.org/images/products/004/400/005/1716/ingredients_en.7.400.jpg"
+            },
+            {
+              "url": "https://images.openfoodfacts.org/images/products/004/400/005/1716/nutrition_en.20.400.jpg"
+            }
+          ],
+          "ingredients": [
+            {
+              "name": "Whole grain wheat",
+              "vegan": "yes",
+              "vegetarian": "yes",
+              "ingredients": []
+            },
+            {
+              "name": "canola oil",
+              "vegan": "yes",
+              "vegetarian": "yes",
+              "ingredients": []
+            },
+            {
+              "name": "salt",
+              "vegan": "yes",
+              "vegetarian": "yes",
+              "ingredients": []
+            },
+            {
+              "name": "rice starch",
+              "vegan": "yes",
+              "vegetarian": "yes",
+              "ingredients": []
+            },
+            {
+              "name": "black pepper",
+              "vegan": "yes",
+              "vegetarian": "yes",
+              "ingredients": []
+            },
+            {
+              "name": "onion",
+              "vegan": "yes",
+              "vegetarian": "yes",
+              "ingredients": []
+            },
+            {
+              "name": "garlic",
+              "vegan": "yes",
+              "vegetarian": "yes",
+              "ingredients": []
+            },
+            {
+              "name": "extra virgin olive oil",
+              "vegan": "yes",
+              "vegetarian": "yes",
+              "ingredients": []
+            },
+            {
+              "name": "citric acid",
+              "vegan": "yes",
+              "vegetarian": "yes",
+              "ingredients": []
+            },
+            {
+              "name": "natural flavor",
+              "vegan": "maybe",
+              "vegetarian": "maybe",
+              "ingredients": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "recordedAt": "2025-10-09T17:19:16.2981+00:00",
+      "request": {
+        "method": "POST",
+        "path": "/ingredicheck/analyze",
+        "query": {},
+        "bodyType": "form-data",
+        "body": {
+          "files": [],
+          "fields": {
+            "barcode": "0044000051716",
+            "clientActivityId": "8499B838-B136-44C3-B792-02365E3AC585",
+            "userPreferenceText": "No seed oils"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": [
+          {
+            "reasoning": "",
+            "preference": "No seed oils",
+            "ingredientName": "canola oil",
+            "safetyRecommendation": "DefinitelyUnsafe"
+          }
+        ]
+      }
+    }
+  ],
+  "variables": {
+    "ID_001": "1903"
+  }
+}

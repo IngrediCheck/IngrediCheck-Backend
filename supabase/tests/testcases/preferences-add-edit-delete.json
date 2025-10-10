@@ -1,0 +1,102 @@
+{
+  "recordingSessionId": "2025-10-09-1703-preferences-add-edit-delete",
+  "recordedUserId": "a16468df-7a05-4270-b06a-b1958cdfce9d",
+  "exportedAt": "2025-10-09T17:04:35.948Z",
+  "totalEntries": 4,
+  "testCase": "preferences-add-edit-delete",
+  "requests": [
+    {
+      "recordedAt": "2025-10-09T17:04:04.20573+00:00",
+      "request": {
+        "method": "POST",
+        "path": "/ingredicheck/preferencelists/default",
+        "query": {},
+        "bodyType": "form-data",
+        "body": {
+          "files": [],
+          "fields": {
+            "preference": "No seed oils",
+            "clientActivityId": "69E786A2-F4CF-487E-8E6B-0C2C31CAE46D"
+          }
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "id": "{{var:ID_001}}",
+          "text": "No seed oils",
+          "result": "success",
+          "annotatedText": "No **seed oils**"
+        }
+      }
+    },
+    {
+      "recordedAt": "2025-10-09T17:04:13.82474+00:00",
+      "request": {
+        "method": "POST",
+        "path": "/ingredicheck/preferencelists/default",
+        "query": {},
+        "bodyType": "form-data",
+        "body": {
+          "files": [],
+          "fields": {
+            "preference": "I can’t have milk or milk products",
+            "clientActivityId": "D96863B2-B498-41F0-BCF0-EA037023E3B7"
+          }
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "id": "{{var:ID_002}}",
+          "text": "I can’t have milk or milk products",
+          "result": "success",
+          "annotatedText": "I can’t have **milk** or **milk products**"
+        }
+      }
+    },
+    {
+      "recordedAt": "2025-10-09T17:04:27.053165+00:00",
+      "request": {
+        "method": "PUT",
+        "path": "/ingredicheck/preferencelists/default/{{var:ID_001}}",
+        "query": {},
+        "bodyType": "form-data",
+        "body": {
+          "files": [],
+          "fields": {
+            "preference": "No seed oils, except peanut oil",
+            "clientActivityId": "A4982D5C-03D6-4F60-A235-EA6B9E905BBC"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "{{var:ID_001}}",
+          "text": "No seed oils, except peanut oil",
+          "result": "success",
+          "annotatedText": "No **seed oils**, except **peanut oil**"
+        }
+      }
+    },
+    {
+      "recordedAt": "2025-10-09T17:04:31.639112+00:00",
+      "request": {
+        "method": "DELETE",
+        "path": "/ingredicheck/preferencelists/default/{{var:ID_002}}",
+        "query": {},
+        "bodyType": "empty",
+        "body": null
+      },
+      "response": {
+        "status": 204,
+        "body": null
+      }
+    }
+  ],
+  "variables": {
+    "ID_001": "1895",
+    "ID_002": "1896"
+  }
+}

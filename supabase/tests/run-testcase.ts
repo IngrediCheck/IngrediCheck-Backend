@@ -96,6 +96,15 @@ if (!envLoaded) {
 const PLACEHOLDER_REGEXP = /\{\{var:([A-Z0-9_:-]+)\}\}/g
 const TESTCASES_ROOT = join(scriptDir, 'testcases')
 
+async function prompt(question: string): Promise<string | null> {
+    await Deno.stdout.write(new TextEncoder().encode(question))
+    const buf = new Uint8Array(1024)
+    const n = await Deno.stdin.read(buf)
+    if (n === null) return null
+    const input = new TextDecoder().decode(buf.subarray(0, n)).trim()
+    return input
+}
+
 type TestCase = {
     slug: string
     displayName: string
@@ -140,7 +149,7 @@ async function discoverTestCases(): Promise<TestCase[]> {
     return cases
 }
 
-function promptTestCaseSelection(cases: TestCase[]): TestCase[] {
+async function promptTestCaseSelection(cases: TestCase[]): Promise<TestCase[]> {
     if (cases.length === 0) {
         console.error('Error: No recorded regression test cases were found under supabase/tests/testcases.')
         Deno.exit(1)
@@ -151,32 +160,87 @@ function promptTestCaseSelection(cases: TestCase[]): TestCase[] {
         return cases
     }
 
-    const allOption = cases.length + 1
+    // Display available test cases
+    console.log('\nAvailable test cases:')
+    cases.forEach((testCase, index) => {
+        console.log(`  ${index + 1}. ${testCase.displayName}`)
+    })
 
     while (true) {
-        console.log('\nAvailable regression test cases:')
-        cases.forEach((testCase, index) => {
-            console.log(`  ${index + 1}. ${testCase.displayName}`)
-        })
-        console.log(`  ${allOption}. All test cases`)
-
-        const input = prompt(`Select a test case (1-${allOption}):`)?.trim() ?? ''
-        const numeric = Number.parseInt(input, 10)
-        if (Number.isNaN(numeric)) {
-            if (input.toLowerCase() === 'all') {
-                return cases
-            }
-            console.error('Please enter a valid number.')
-            continue
-        }
-        if (numeric === allOption) {
+        const input = await prompt('\nSelect test cases to run (numbers, ranges like "1-3", "all", or press Enter for all): ')
+        
+        if (!input || input.trim() === '') {
+            console.log('Running all test cases')
             return cases
         }
-        if (numeric >= 1 && numeric <= cases.length) {
-            return [cases[numeric - 1]]
+
+        const trimmedInput = input.trim().toLowerCase()
+        
+        if (trimmedInput === 'all') {
+            console.log('Running all test cases')
+            return cases
         }
-        console.error(`Please enter a number between 1 and ${allOption}.`)
+
+        try {
+            const selectedIndices = parseSelection(trimmedInput, cases.length)
+            if (selectedIndices.length === 0) {
+                console.log('No valid selections. Please try again.')
+                continue
+            }
+
+            const selectedCases = selectedIndices.map(index => cases[index - 1])
+            console.log(`Running ${selectedCases.length} selected test case(s): ${selectedCases.map(c => c.displayName).join(', ')}`)
+            return selectedCases
+        } catch (error) {
+            console.log(`Invalid selection: ${error instanceof Error ? error.message : String(error)}. Please try again.`)
+        }
     }
+}
+
+function parseSelection(input: string, maxCount: number): number[] {
+    const selections = new Set<number>()
+    
+    // Split by comma and process each part
+    const parts = input.split(',').map(part => part.trim()).filter(part => part.length > 0)
+    
+    for (const part of parts) {
+        if (part.includes('-')) {
+            // Handle ranges like "1-3"
+            const rangeParts = part.split('-').map(p => p.trim())
+            if (rangeParts.length !== 2) {
+                throw new Error(`Invalid range format: ${part}`)
+            }
+            
+            const start = parseInt(rangeParts[0], 10)
+            const end = parseInt(rangeParts[1], 10)
+            
+            if (isNaN(start) || isNaN(end)) {
+                throw new Error(`Invalid range numbers: ${part}`)
+            }
+            
+            if (start > end) {
+                throw new Error(`Range start must be <= end: ${part}`)
+            }
+            
+            for (let i = start; i <= end; i++) {
+                if (i >= 1 && i <= maxCount) {
+                    selections.add(i)
+                }
+            }
+        } else {
+            // Handle single numbers
+            const num = parseInt(part, 10)
+            if (isNaN(num)) {
+                throw new Error(`Invalid number: ${part}`)
+            }
+            
+            if (num >= 1 && num <= maxCount) {
+                selections.add(num)
+            }
+        }
+    }
+    
+    return Array.from(selections).sort((a, b) => a - b)
 }
 
 function trimTrailingSlash(value: string): string {
@@ -382,19 +446,103 @@ function coerceToString(value: unknown): string {
     return String(value)
 }
 
+function formatValueForDisplay(value: unknown, maxLength: number = 200): string {
+    if (value === null) return 'null'
+    if (value === undefined) return 'undefined'
+    
+    if (typeof value === 'string') {
+        if (value.length <= maxLength) {
+            return `"${value}"`
+        }
+        return `"${value.substring(0, maxLength)}..." (truncated, ${value.length} chars)`
+    }
+    
+    if (typeof value === 'number' || typeof value === 'boolean') {
+        return String(value)
+    }
+    
+    if (Array.isArray(value)) {
+        if (value.length === 0) return '[]'
+        const items = value.slice(0, 3).map(item => formatValueForDisplay(item, 50))
+        const suffix = value.length > 3 ? `, ...] (${value.length} items)` : ']'
+        return `[${items.join(', ')}${suffix}`
+    }
+    
+    if (typeof value === 'object') {
+        try {
+            const json = JSON.stringify(value, null, 2)
+            if (json.length <= maxLength) {
+                return json
+            }
+            return `${json.substring(0, maxLength)}... (truncated, ${json.length} chars)`
+        } catch {
+            return '[object Object] (circular reference)'
+        }
+    }
+    
+    return String(value)
+}
+
+function getTypeDescription(value: unknown): string {
+    if (value === null) return 'null'
+    if (value === undefined) return 'undefined'
+    if (Array.isArray(value)) return `array (${value.length} items)`
+    if (typeof value === 'object') return 'object'
+    return typeof value
+}
+
+function formatRequestDetails(entry: RecordedRequest): string {
+    const lines: string[] = []
+    lines.push(`• Method: ${entry.request.method}`)
+    lines.push(`• Path: ${entry.request.path}`)
+    
+    if (Object.keys(entry.request.query).length > 0) {
+        const queryStr = new URLSearchParams(entry.request.query).toString()
+        lines.push(`• Query: ${queryStr}`)
+    }
+    
+    if (entry.request.bodyType !== 'empty' && entry.request.body !== null && entry.request.body !== undefined) {
+        if (entry.request.bodyType === 'json') {
+            lines.push(`• Body: (json) ${formatValueForDisplay(entry.request.body, 100)}`)
+        } else if (entry.request.bodyType === 'form-data') {
+            const body = entry.request.body as { fields?: Record<string, unknown>; files?: unknown[] }
+            const fieldCount = Object.keys(body.fields || {}).length
+            const fileCount = (body.files || []).length
+            lines.push(`• Body: (form-data) ${fieldCount} fields, ${fileCount} files`)
+            if (fieldCount > 0) {
+                const sampleFields = Object.entries(body.fields || {}).slice(0, 2)
+                const fieldPreview = sampleFields.map(([k, v]) => `${k}: ${formatValueForDisplay(v, 30)}`).join(', ')
+                const more = fieldCount > 2 ? `, ...` : ''
+                lines.push(`  Fields: { ${fieldPreview}${more} }`)
+            }
+        } else {
+            lines.push(`• Body: (${entry.request.bodyType}) ${formatValueForDisplay(entry.request.body, 100)}`)
+        }
+    }
+    
+    return lines.join('\n')
+}
+
+function formatResponseDetails(status: number, body: unknown): string {
+    const lines: string[] = []
+    lines.push(`• Status: ${status}`)
+    lines.push(`• Body: ${formatValueForDisplay(body, 200)}`)
+    return lines.join('\n')
+}
+
 function compareBodies(expected: unknown, actual: unknown, variables: PlaceholderStore, path: string, errors: string[]) {
     if (typeof expected === 'string') {
         const match = expected.match(/^\{\{var:([A-Z0-9_:-]+)\}\}$/)
         if (match) {
             const [, name] = match
             if (actual === undefined || actual === null) {
-                errors.push(`${path}: expected value for placeholder {{var:${name}}} but received ${actual}`)
+                errors.push(`${path}: expected value for placeholder {{var:${name}}} but received ${getTypeDescription(actual)} ${formatValueForDisplay(actual)}`)
                 return
             }
             const record: PlaceholderValue = { raw: actual, text: coerceToString(actual) }
             const existing = variables.get(name)
             if (existing && existing.text !== record.text) {
-                errors.push(`${path}: placeholder {{var:${name}}} mismatch. Expected ${existing.text}, received ${record.text}`)
+                errors.push(`${path}: placeholder {{var:${name}}} mismatch.\n  Expected: ${formatValueForDisplay(existing.raw)}\n  Received: ${formatValueForDisplay(actual)}`)
                 return
             }
             variables.set(name, record)
@@ -404,18 +552,18 @@ function compareBodies(expected: unknown, actual: unknown, variables: Placeholde
 
     if (expected === null || expected === undefined) {
         if (actual !== expected) {
-            errors.push(`${path}: expected ${expected}, received ${actual}`)
+            errors.push(`${path}:\n  Expected: ${getTypeDescription(expected)} ${formatValueForDisplay(expected)}\n  Received: ${getTypeDescription(actual)} ${formatValueForDisplay(actual)}`)
         }
         return
     }
 
     if (Array.isArray(expected)) {
         if (!Array.isArray(actual)) {
-            errors.push(`${path}: expected array, received ${typeof actual}`)
+            errors.push(`${path}:\n  Expected: ${getTypeDescription(expected)} ${formatValueForDisplay(expected)}\n  Received: ${getTypeDescription(actual)} ${formatValueForDisplay(actual)}`)
             return
         }
         if (expected.length !== actual.length) {
-            errors.push(`${path}: array length mismatch. Expected ${expected.length}, received ${actual.length}`)
+            errors.push(`${path}: array length mismatch.\n  Expected: ${expected.length} items ${formatValueForDisplay(expected)}\n  Received: ${actual.length} items ${formatValueForDisplay(actual)}`)
             return
         }
         expected.forEach((item, index) => {
@@ -426,7 +574,7 @@ function compareBodies(expected: unknown, actual: unknown, variables: Placeholde
 
     if (typeof expected === 'object') {
         if (!actual || typeof actual !== 'object') {
-            errors.push(`${path}: expected object, received ${typeof actual}`)
+            errors.push(`${path}:\n  Expected: ${getTypeDescription(expected)} ${formatValueForDisplay(expected)}\n  Received: ${getTypeDescription(actual)} ${formatValueForDisplay(actual)}`)
             return
         }
         for (const [key, value] of Object.entries(expected as Record<string, unknown>)) {
@@ -437,7 +585,7 @@ function compareBodies(expected: unknown, actual: unknown, variables: Placeholde
     }
 
     if (expected !== actual) {
-        errors.push(`${path}: expected ${expected}, received ${actual}`)
+        errors.push(`${path}:\n  Expected: ${getTypeDescription(expected)} ${formatValueForDisplay(expected)}\n  Received: ${getTypeDescription(actual)} ${formatValueForDisplay(actual)}`)
     }
 }
 
@@ -515,9 +663,21 @@ async function replayArtifact(sessionPath: string, testCaseName: string, config:
             } else {
                 stats.failed += 1
                 console.error(`❌ ${label}`)
+                console.error('')
+                console.error('   Request Details:')
+                console.error(`   ${formatRequestDetails(step).replace(/\n/g, '\n   ')}`)
+                console.error('')
+                console.error('   Expected Response:')
+                console.error(`   ${formatResponseDetails(step.response.status, step.response.body).replace(/\n/g, '\n   ')}`)
+                console.error('')
+                console.error('   Actual Response:')
+                console.error(`   ${formatResponseDetails(result.response.status, result.body).replace(/\n/g, '\n   ')}`)
+                console.error('')
+                console.error('   Comparison Errors:')
                 for (const message of result.errors) {
-                    console.error(`   - ${message}`)
+                    console.error(`   ${message.replace(/\n/g, '\n   ')}`)
                 }
+                console.error('')
                 if (config.stopOnFailure) {
                     aborted = true
                     break
@@ -526,7 +686,12 @@ async function replayArtifact(sessionPath: string, testCaseName: string, config:
         } catch (error) {
             stats.failed += 1
             console.error(`❌ ${label}`)
-            console.error(`   - Unexpected error: ${error instanceof Error ? error.message : String(error)}`)
+            console.error('')
+            console.error('   Request Details:')
+            console.error(`   ${formatRequestDetails(step).replace(/\n/g, '\n   ')}`)
+            console.error('')
+            console.error(`   Unexpected error: ${error instanceof Error ? error.message : String(error)}`)
+            console.error('')
             if (config.stopOnFailure) {
                 aborted = true
                 break
@@ -542,14 +707,18 @@ async function replayArtifact(sessionPath: string, testCaseName: string, config:
 async function run() {
     const config = loadConfig()
     const testCases = await discoverTestCases()
-    const selectedCases = promptTestCaseSelection(testCases)
-    const { accessToken, userId } = await signIn(config.baseUrl, config.anonKey)
-    const tokens: Tokens = { accessToken, anonKey: config.anonKey, userId }
+    const selectedCases = await promptTestCaseSelection(testCases)
 
     const totals: ReplayStats = { total: 0, passed: 0, failed: 0 }
 
     for (const testCase of selectedCases) {
         console.log(`\n=== ${testCase.displayName} ===`)
+        
+        // Create a new anon account for each test case
+        console.log('Creating new anonymous user account for this test case...')
+        const { accessToken, userId } = await signIn(config.baseUrl, config.anonKey)
+        const tokens: Tokens = { accessToken, anonKey: config.anonKey, userId }
+        console.log(`Created anonymous user: ${userId}`)
 
         const { stats, aborted } = await replayArtifact(testCase.filePath, testCase.displayName, config, tokens)
         totals.total += stats.total

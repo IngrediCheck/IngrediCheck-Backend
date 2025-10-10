@@ -121,7 +121,7 @@ function serializeResponseBody(body: unknown): unknown {
         return { type: 'bytes', value: toBase64(body) }
     }
     if (typeof body === 'string') {
-        return { type: 'text', value: body }
+        return body  // Don't wrap strings - return them directly
     }
     try {
         return JSON.parse(JSON.stringify(body))

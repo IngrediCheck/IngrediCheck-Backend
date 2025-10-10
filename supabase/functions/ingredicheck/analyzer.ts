@@ -66,8 +66,16 @@ export async function analyze(ctx: Context) {
         ctx.response.status = 200
         ctx.response.body = ingredientRecommendations
     } catch (error) {
-        ctx.response.status = 500
-        ctx.response.body = error instanceof Error ? error.message : String(error)
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        
+        // Check if it's a "Product not found" error (404)
+        if (errorMessage.includes('Product not found')) {
+            ctx.response.status = 404
+        } else {
+            ctx.response.status = 500
+        }
+        
+        ctx.response.body = { error: errorMessage }
     }
 
     const endTime = new Date()
