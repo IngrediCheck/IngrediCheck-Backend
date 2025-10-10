@@ -55,7 +55,7 @@ type PlaceholderValue = {
 type PlaceholderStore = Map<string, PlaceholderValue>;
 
 // Fuzzy matching configuration types
-type MatchStrategy = "exact" | "fuzzy" | "regex";
+type MatchStrategy = "exact" | "fuzzy" | "regex" | "ignore";
 
 type MatchResult = {
   matches: boolean;
@@ -70,9 +70,25 @@ type FieldMatcher = {
   pattern?: RegExp; // for regex matching
 };
 
+type DelayRule = {
+  method: string;           // e.g., "GET", "POST", or "*" for any
+  pathPattern: string | RegExp;  // e.g., "/ingredicheck/history" or regex
+  delaySeconds: number;     // delay before making the request
+};
+
 // Configuration for field matching strategies
 const FIELD_MATCHERS: FieldMatcher[] = [
-  { pathPattern: /\.annotatedText$/, strategy: "fuzzy", threshold: 0.95 }
+  { pathPattern: /\.annotatedText$/, strategy: "fuzzy", threshold: 0.95 },
+  { pathPattern: /\.created_at$/, strategy: "ignore" } // Ignore timestamp differences
+];
+
+// Configuration for request delays
+const DELAY_RULES: DelayRule[] = [
+  { 
+    method: "GET", 
+    pathPattern: "/ingredicheck/history", 
+    delaySeconds: 2 
+  }
 ];
 
 const FUZZY_MATCH_THRESHOLD = 0.95;
@@ -530,6 +546,24 @@ function selectMatcherForPath(path: string): FieldMatcher | null {
   return null;
 }
 
+// Select appropriate delay rule for a given request
+function selectDelayForRequest(method: string, path: string): number {
+  for (const rule of DELAY_RULES) {
+    // Check if method matches (or wildcard)
+    if (rule.method !== "*" && rule.method !== method.toUpperCase()) {
+      continue;
+    }
+    
+    // Check if path matches
+    if (typeof rule.pathPattern === "string") {
+      if (path === rule.pathPattern) return rule.delaySeconds;
+    } else {
+      if (rule.pathPattern.test(path)) return rule.delaySeconds;
+    }
+  }
+  return 0; // no delay
+}
+
 // Fuzzy matching with threshold
 function matchFuzzy(expected: string, actual: string, threshold: number): MatchResult {
   const similarity = calculateStringSimilarity(expected, actual);
@@ -773,10 +807,15 @@ function compareBodies(
   }
 
   if (expected !== actual) {
-    // Check if this field should use fuzzy matching
+    // Check if this field should use special matching
     const matcher = selectMatcherForPath(path);
     
-    if (matcher && matcher.strategy === "fuzzy" && typeof expected === "string" && typeof actual === "string") {
+    if (matcher && matcher.strategy === "ignore") {
+      // Ignore differences for this field
+      warnings.push(
+        `⚠️  ${path}: Ignoring field differences\n  Expected: ${formatValueForDisplay(expected)}\n  Received: ${formatValueForDisplay(actual)}`
+      );
+    } else if (matcher && matcher.strategy === "fuzzy" && typeof expected === "string" && typeof actual === "string") {
       const threshold = matcher.threshold ?? FUZZY_MATCH_THRESHOLD;
       const result = matchFuzzy(expected, actual, threshold);
       
@@ -821,6 +860,12 @@ async function replayRequest(
     entry.request.query ?? {},
     variables,
   );
+
+  // Apply delay if configured
+  const delaySeconds = selectDelayForRequest(entry.request.method, resolvedPath);
+  if (delaySeconds > 0) {
+    await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
+  }
 
   const url = new URL(resolvedPath.replace(/^\//, ""), config.functionsBaseUrl);
   queryParams.forEach((value, key) => {
