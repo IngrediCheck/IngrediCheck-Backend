@@ -811,10 +811,8 @@ function compareBodies(
     const matcher = selectMatcherForPath(path);
     
     if (matcher && matcher.strategy === "ignore") {
-      // Ignore differences for this field
-      warnings.push(
-        `⚠️  ${path}: Ignoring field differences\n  Expected: ${formatValueForDisplay(expected)}\n  Received: ${formatValueForDisplay(actual)}`
-      );
+      // Silently ignore differences for this field
+      return;
     } else if (matcher && matcher.strategy === "fuzzy" && typeof expected === "string" && typeof actual === "string") {
       const threshold = matcher.threshold ?? FUZZY_MATCH_THRESHOLD;
       const result = matchFuzzy(expected, actual, threshold);
