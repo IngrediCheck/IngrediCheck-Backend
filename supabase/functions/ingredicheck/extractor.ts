@@ -62,8 +62,7 @@ export async function extract(ctx: Context) {
         })
     )
 
-    EdgeRuntime.waitUntil(
-        ctx.state.supabaseClient.functions.invoke('background/log_extract', {
+    await    ctx.state.supabaseClient.functions.invoke('background/log_extract', {
             body: {
                 activity_id: ctx.state.activityId,
                 client_activity_id: ctx.state.clientActivityId,
@@ -78,5 +77,4 @@ export async function extract(ctx: Context) {
             },
             method: 'POST'
         })
-    )
 }
