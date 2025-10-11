@@ -287,6 +287,7 @@ export async function preferenceValidatorAgent(
         /\[\[ ## output ## \]\]\s*(.*?)(?=\[\[ ## completed ## \]\]|$)/s,
       );
       if (!outputMatch) {
+        console.error("preferenceValidatorAgent: missing output block", { content });
         return conversation.functionObject.report_failure({
           explanation: "Could not parse structured output",
         });
@@ -304,6 +305,7 @@ export async function preferenceValidatorAgent(
           output.match(/^report_failure\(\s*(["'])((?:\\.|(?!\1)[\s\S])*?)\1\s*\)\s*$/)?.[2] ?? "";
         return conversation.functionObject.report_failure({ explanation });
       }
+      console.error("preferenceValidatorAgent: unknown output format", { content });
       return conversation.functionObject.report_failure({
         explanation: "Unknown structured output",
       });
