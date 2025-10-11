@@ -1,21 +1,28 @@
 name: Deploy Supabase Edge Functions to PROD
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'supabase/functions/**'
-      - '.github/workflows/deploy-edge-functions.yml'
+  workflow_run:
+    workflows: [ "Regression Tests" ]
+    types:
+      - completed
   workflow_dispatch: # Allow manual triggering
 
 jobs:
   deploy:
     name: Deploy Edge Functions to Supabase
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
     environment: PROD
     
     steps:
+      - name: Checkout code (workflow_run)
+        if: github.event_name == 'workflow_run'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
       - name: Checkout code
+        if: github.event_name != 'workflow_run'
         uses: actions/checkout@v4
         
       - name: Setup Supabase CLI

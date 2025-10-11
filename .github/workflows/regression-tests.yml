@@ -1,0 +1,47 @@
+name: Regression Tests
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'supabase/functions/**'
+      - 'supabase/tests/**'
+      - '.github/workflows/regression-tests.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: regression-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    name: Run Supabase Regression Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase environment
+        run: deno run --allow-all supabase/tests/local-env.ts setup
+
+      - name: Run regression tests
+        run: deno run --allow-all supabase/tests/run-testcase.ts all
+
+      - name: Teardown local Supabase environment
+        if: always()
+        run: deno run --allow-all supabase/tests/local-env.ts teardown

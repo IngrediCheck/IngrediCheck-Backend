@@ -165,7 +165,7 @@ async function loadEnvFromRoot(): Promise<void> {
   } catch (error) {
     if (error instanceof Deno.errors.NotFound) {
       console.warn(`   ⚠️  No .env file found at ${envPath}`);
-      console.warn(`   Create one from .env.template with your API keys`);
+      console.warn(`   Assuming Secrets are already set`);
     } else {
       throw error;
     }
