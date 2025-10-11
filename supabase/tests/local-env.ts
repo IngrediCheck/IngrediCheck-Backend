@@ -484,11 +484,6 @@ async function setupCommand(): Promise<void> {
 
   console.log("1️⃣.5 Preparing edge function secrets...");
   await createLocalFunctionsEnv();
-  const apisToCheck = ["OPENAI_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY"];
-  for (const key of apisToCheck) {
-    const value = Deno.env.get(key);
-    console.log(`   ${key} length: ${value ? value.length : 0}`);
-  }
   
   // 2. Check if Supabase is already running
   console.log("2️⃣ Checking existing Supabase instance...");
