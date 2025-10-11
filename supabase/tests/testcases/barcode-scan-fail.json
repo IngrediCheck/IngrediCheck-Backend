@@ -1,0 +1,48 @@
+{
+  "recordingSessionId": "2025-10-09-1721-barcode-scan-fail",
+  "recordedUserId": "6da99474-9e3b-412b-ad38-b50706788beb",
+  "exportedAt": "2025-10-09T17:21:43.980Z",
+  "totalEntries": 2,
+  "testCase": "barcode-scan-fail",
+  "requests": [
+    {
+      "recordedAt": "2025-10-09T17:21:36.980064+00:00",
+      "request": {
+        "method": "GET",
+        "path": "/ingredicheck/inventory/0842379192234",
+        "query": {
+          "clientActivityId": "93D8F0BD-CEF0-467A-B819-3E098F69D2BB"
+        },
+        "bodyType": "empty",
+        "body": null
+      },
+      "response": {
+        "status": 404,
+        "body": {}
+      }
+    },
+    {
+      "recordedAt": "2025-10-09T17:21:37.138194+00:00",
+      "request": {
+        "method": "POST",
+        "path": "/ingredicheck/analyze",
+        "query": {},
+        "bodyType": "form-data",
+        "body": {
+          "files": [],
+          "fields": {
+            "barcode": "0842379192234",
+            "clientActivityId": "93D8F0BD-CEF0-467A-B819-3E098F69D2BB",
+            "userPreferenceText": "No seed oils"
+          }
+        }
+      },
+      "response": {
+        "status": 404,
+        "body": {
+          "error": "Product not found: 0842379192234"
+        }
+      }
+    }
+  ]
+}

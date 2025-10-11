@@ -1,0 +1,127 @@
+{
+  "recordingSessionId": "2025-10-10-0610-photo-scan-success",
+  "recordedUserId": "6da99474-9e3b-412b-ad38-b50706788beb",
+  "exportedAt": "2025-10-10T06:11:39.068Z",
+  "totalEntries": 3,
+  "testCase": "photo-scan-success",
+  "requests": [
+    {
+      "recordedAt": "2025-10-10T06:11:02.286007+00:00",
+      "request": {
+        "method": "POST",
+        "path": "/ingredicheck/preferencelists/default",
+        "query": {},
+        "bodyType": "form-data",
+        "body": {
+          "files": [],
+          "fields": {
+            "preference": "No seed oils",
+            "clientActivityId": "91ED2F8E-063B-448C-8C02-B17912B5F823"
+          }
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "id": "{{var:ID_001}}",
+          "text": "No seed oils",
+          "result": "success",
+          "annotatedText": "No **seed oils**"
+        }
+      }
+    },
+    {
+      "recordedAt": "2025-10-10T06:11:24.405606+00:00",
+      "request": {
+        "method": "POST",
+        "path": "/ingredicheck/extract",
+        "query": {},
+        "bodyType": "form-data",
+        "body": {
+          "files": [],
+          "fields": {
+            "productImages": "[{\"imageFileHash\":\"f8b20b3827bae4b54ee20594d30b216ccbe95c2db77132f53f212a9564f0eb80\",\"imageOCRText\":\"Profiles\\nTab\\nWindow\\nHelp\\na Amazon.com: Triscuit Cracked Pepper & Olive Oil Whole Grain Wheat Crackers, Lunch Snacks, Snack Crackers, Family Size, 12.5 oz\\n4SC\\/ref=sspa_dk_detail _2?pd_rd_i=B072WYD4SC&pd_rd_w=213y0&content-id=amzn1.sym.7b88b395-cd5a-4dc7-a145-3baffd6df512&pf_rd_p=7b8\\nDeliver to sanket\\nRedmond 98052\\nJoin Prime\\nAmazon Fresh\\nAmazon Haul\\nSearch Amazon\\nSame-Day Delivery\\nMedical Care\\nGroceries\\nBuy Again\\nPet Supplies\\nBrowsing History\\nBooks\\nHandmade\\nS\\nIMAGES\\nINGREDIENTS: WHOLE GRAIN WHEAT, CANOLA OIL, SALT, RICE\\nSTARCH, BLACK PEPPER, ONION POWDER, GARLIC POWDER,\\nEXTRA VIRGIN OLIVE OIL, NATURALFLAVOR (CONTAINS CELERY).\\nCONTAINS: WHEAT.\\nV ShoW more\\nSee customer imaaes and reviews\"}]",
+            "clientActivityId": "32118842-ABAF-4159-B08F-85CC10FD94BE"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "name": "Cracked Pepper & Olive Oil Whole Grain Wheat Crackers",
+          "brand": "Triscuit",
+          "images": [
+            {
+              "imageFileHash": "f8b20b3827bae4b54ee20594d30b216ccbe95c2db77132f53f212a9564f0eb80"
+            }
+          ],
+          "ingredients": [
+            {
+              "name": "Whole Grain Wheat"
+            },
+            {
+              "name": "Canola Oil"
+            },
+            {
+              "name": "Salt"
+            },
+            {
+              "name": "Rice Starch"
+            },
+            {
+              "name": "Black Pepper"
+            },
+            {
+              "name": "Onion Powder"
+            },
+            {
+              "name": "Garlic Powder"
+            },
+            {
+              "name": "Extra Virgin Olive Oil"
+            },
+            {
+              "name": "Natural Flavor (Contains Celery)"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "recordedAt": "2025-10-10T06:11:27.424311+00:00",
+      "request": {
+        "method": "POST",
+        "path": "/ingredicheck/analyze",
+        "query": {},
+        "bodyType": "form-data",
+        "body": {
+          "files": [],
+          "fields": {
+            "clientActivityId": "32118842-ABAF-4159-B08F-85CC10FD94BE",
+            "userPreferenceText": "No seed oils"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": [
+          {
+            "reasoning": "",
+            "preference": "No seed oils",
+            "ingredientName": "Canola Oil",
+            "safetyRecommendation": "DefinitelyUnsafe"
+          },
+          {
+            "reasoning": "",
+            "preference": "No seed oils",
+            "ingredientName": "Extra Virgin Olive Oil",
+            "safetyRecommendation": "MaybeUnsafe"
+          }
+        ]
+      }
+    }
+  ],
+  "variables": {
+    "ID_001": "1930"
+  }
+}
