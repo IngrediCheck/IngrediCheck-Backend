@@ -43,6 +43,18 @@ jobs:
       - name: Run regression tests
         run: deno run --allow-all supabase/tests/run-testcase.ts all
 
+      - name: Collect edge function logs on failure
+        if: failure()
+        run: |
+          docker ps --format '{{.Names}}' || true
+          container_id=$(docker ps --filter "name=supabase-functions" --format "{{.ID}}" | head -n 1)
+          if [ -n "$container_id" ]; then
+            echo "Collecting logs from container: $container_id"
+            docker logs "$container_id" --since 30m || true
+          else
+            echo "supabase-functions container not found"
+          fi
+
       - name: Teardown local Supabase environment
         if: always()
         run: deno run --allow-all supabase/tests/local-env.ts teardown
