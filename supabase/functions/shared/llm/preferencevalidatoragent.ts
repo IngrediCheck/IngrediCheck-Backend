@@ -259,7 +259,7 @@ export async function preferenceValidatorAgent(
     },
   ];
 
-  const model = Deno.env.get("PREFERENCE_VALIDATOR_MODEL") ?? "openai/gpt-oss-20b";
+  const model = "openai/gpt-oss-20b";
   const program = createStructuredOutputProgram({
     id: "preference-groq",
     provider: "groq",

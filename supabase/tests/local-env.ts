@@ -242,8 +242,6 @@ async function createLocalFunctionsEnv(): Promise<void> {
     "OPENAI_API_KEY",
     "GEMINI_API_KEY", 
     "GROQ_API_KEY",
-    "EXTRACTOR_MODEL",
-    "PREFERENCE_VALIDATOR_MODEL",
   ];
   
   const envContent: string[] = [

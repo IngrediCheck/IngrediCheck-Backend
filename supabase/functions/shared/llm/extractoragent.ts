@@ -40,8 +40,7 @@ export async function extractorAgent(
 
   const program = createOpenAIProgram({
     id: "extractor-openai-ft",
-    model: Deno.env.get("EXTRACTOR_MODEL") ??
-      "ft:gpt-4o-mini-2024-07-18:personal:extractor:9ob7B1Fq",
+    model: "ft:gpt-4o-mini-2024-07-18:personal:extractor:9ob7B1Fq",
   });
 
   await genericAgent(
