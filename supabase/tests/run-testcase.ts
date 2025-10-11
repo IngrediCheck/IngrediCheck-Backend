@@ -54,6 +54,7 @@ type PlaceholderValue = {
 };
 
 type PlaceholderStore = Map<string, PlaceholderValue>;
+type ReplacementStore = Map<string, string>;
 
 // Fuzzy matching configuration types
 type MatchStrategy = "exact" | "fuzzy" | "regex" | "ignore";
@@ -77,9 +78,14 @@ type DelayRule = {
   delaySeconds: number;     // delay before making the request
 };
 
+type ReplacementRule = {
+  fieldName: string;           // e.g., "clientActivityId"
+  strategy: "uuid";            // extensible for future replacement types
+};
+
 // Configuration for field matching strategies
 const FIELD_MATCHERS: FieldMatcher[] = [
-  { pathPattern: /\.annotatedText$/, strategy: "fuzzy", threshold: 0.95 },
+  { pathPattern: /\.annotatedText$/, strategy: "fuzzy", threshold: 0.90 },
   { pathPattern: /\.created_at$/, strategy: "ignore" } // Ignore timestamp differences
 ];
 
@@ -92,7 +98,96 @@ const DELAY_RULES: DelayRule[] = [
   }
 ];
 
+// Configuration for field value replacements
+const REPLACEMENT_RULES: ReplacementRule[] = [
+  { 
+    fieldName: "clientActivityId", 
+    strategy: "uuid"
+  }
+  // To add more fields, simply add more rules:
+  // { fieldName: "sessionId", strategy: "uuid" },
+  // { fieldName: "requestId", strategy: "uuid" }
+];
+
 const FUZZY_MATCH_THRESHOLD = 0.95;
+
+// Generate a RFC 4122 v4 UUID
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16).toLowerCase();
+  });
+}
+
+// Scan artifact for field values that need replacement and build mapping
+// This finds all unique values for fields specified in REPLACEMENT_RULES and generates new UUIDs for them
+function scanForReplacementValues(artifact: RecordingArtifact): ReplacementStore {
+  const replacementStore: ReplacementStore = new Map();
+  const fieldValues = new Set<string>();
+
+  // First pass: Find all field values that need replacement in requests
+  for (const request of artifact.requests) {
+    // Check query parameters
+    for (const [key, value] of Object.entries(request.request.query)) {
+      if (shouldReplaceField(key) && typeof value === 'string') {
+        fieldValues.add(value);
+      }
+    }
+
+    // Check request body fields
+    if (request.request.body && typeof request.request.body === 'object') {
+      const body = request.request.body as Record<string, unknown>;
+      if (body.fields && typeof body.fields === 'object') {
+        for (const [key, value] of Object.entries(body.fields)) {
+          if (shouldReplaceField(key) && typeof value === 'string') {
+            fieldValues.add(value);
+          }
+        }
+      }
+    }
+  }
+
+  // Generate new UUIDs for each unique field value
+  for (const originalValue of fieldValues) {
+    replacementStore.set(originalValue, generateUUID());
+  }
+
+  return replacementStore;
+}
+
+// Check if a field should be replaced based on replacement rules
+function shouldReplaceField(fieldName: string): boolean {
+  return REPLACEMENT_RULES.some(rule => rule.fieldName === fieldName);
+}
+
+// Replace UUID values anywhere they appear in the document
+// This recursively traverses objects/arrays and replaces any string that matches an original UUID
+function replaceUUIDsInValue(value: unknown, replacements: ReplacementStore): unknown {
+  if (typeof value === 'string') {
+    // Check if this string matches any of our original UUIDs (case-insensitive)
+    for (const [original, replacement] of replacements) {
+      if (value.toLowerCase() === original.toLowerCase()) {
+        return replacement;
+      }
+    }
+    return value;
+  }
+  
+  if (Array.isArray(value)) {
+    return value.map(item => replaceUUIDsInValue(item, replacements));
+  }
+  
+  if (value && typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      result[key] = replaceUUIDsInValue(child, replacements);
+    }
+    return result;
+  }
+  
+  return value;
+}
 
 const scriptDir = dirname(fromFileUrl(import.meta.url));
 const envLoad = await loadEnv({
@@ -350,6 +445,7 @@ function resolvePlaceholdersInString(
 function resolveJsonValue(
   value: unknown,
   variables: PlaceholderStore,
+  replacements?: ReplacementStore,
 ): unknown {
   if (typeof value === "string") {
     const match = value.match(/^\{\{var:([A-Z0-9_:-]+)\}\}$/);
@@ -357,15 +453,19 @@ function resolveJsonValue(
       return requireVariable(match[1], variables).raw ??
         requireVariable(match[1], variables).text;
     }
+    // Apply UUID replacements if provided
+    if (replacements) {
+      return replaceUUIDsInValue(value, replacements);
+    }
     return value;
   }
   if (Array.isArray(value)) {
-    return value.map((entry) => resolveJsonValue(entry, variables));
+    return value.map((entry) => resolveJsonValue(entry, variables, replacements));
   }
   if (value && typeof value === "object") {
     const result: Record<string, unknown> = {};
     for (const [key, child] of Object.entries(value)) {
-      result[key] = resolveJsonValue(child, variables);
+      result[key] = resolveJsonValue(child, variables, replacements);
     }
     return result;
   }
@@ -383,10 +483,16 @@ function resolvePlaceholdersInPath(
 function resolvePlaceholdersInQuery(
   query: Record<string, string>,
   variables: PlaceholderStore,
+  replacements?: ReplacementStore,
 ): URLSearchParams {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
-    params.append(key, resolvePlaceholdersInString(value, variables));
+    let resolved = resolvePlaceholdersInString(value, variables);
+    // Apply UUID replacements if provided
+    if (replacements) {
+      resolved = replaceUUIDsInValue(resolved, replacements) as string;
+    }
+    params.append(key, resolved);
   }
   return params;
 }
@@ -408,15 +514,21 @@ type BuiltRequestBody = {
 function resolveFormScalar(
   value: unknown,
   variables: PlaceholderStore,
+  replacements?: ReplacementStore,
 ): string {
   if (typeof value === "string") {
-    return resolvePlaceholdersInString(value, variables);
+    let resolved = resolvePlaceholdersInString(value, variables);
+    // Apply UUID replacements if provided
+    if (replacements) {
+      resolved = replaceUUIDsInValue(resolved, replacements) as string;
+    }
+    return resolved;
   }
   if (value === null || value === undefined) {
     return "";
   }
   if (Array.isArray(value)) {
-    return value.map((item) => resolveFormScalar(item, variables)).join(",");
+    return value.map((item) => resolveFormScalar(item, variables, replacements)).join(",");
   }
   return String(value);
 }
@@ -424,6 +536,7 @@ function resolveFormScalar(
 function buildRequestBody(
   entry: RecordedRequest,
   variables: PlaceholderStore,
+  replacements?: ReplacementStore,
 ): BuiltRequestBody {
   const headers: Record<string, string> = {};
   const { bodyType, body } = entry.request;
@@ -433,13 +546,13 @@ function buildRequestBody(
   }
 
   if (bodyType === "json") {
-    const resolved = resolveJsonValue(body, variables);
+    const resolved = resolveJsonValue(body, variables, replacements);
     headers["Content-Type"] = "application/json";
     return { body: JSON.stringify(resolved), headers };
   }
 
   if (bodyType === "text") {
-    const resolved = resolveFormScalar(body, variables);
+    const resolved = resolveFormScalar(body, variables, replacements);
     headers["Content-Type"] = "text/plain";
     return { body: String(resolved), headers };
   }
@@ -450,7 +563,7 @@ function buildRequestBody(
     }
     const resolved = resolvePlaceholdersInString(body, variables);
     return {
-      body: decodeBase64(resolved),
+      body: new Uint8Array(decodeBase64(resolved)),
       headers: { ...headers, "Content-Type": "application/octet-stream" },
     };
   }
@@ -466,7 +579,7 @@ function buildRequestBody(
     const form = new FormData();
 
     for (const [key, raw] of Object.entries(fields)) {
-      const resolved = resolveJsonValue(raw, variables);
+      const resolved = resolveJsonValue(raw, variables, replacements);
       if (Array.isArray(resolved)) {
         for (const item of resolved) {
           form.append(key, item == null ? "" : String(item));
@@ -492,7 +605,7 @@ function buildRequestBody(
         ? resolvePlaceholdersInString(descriptor.content, variables)
         : "";
       const bytes = decodeBase64(encodedContent);
-      const blob = new Blob([bytes], { type: contentType });
+      const blob = new Blob([new Uint8Array(bytes)], { type: contentType });
       form.append(name, blob, filename);
     }
 
@@ -714,6 +827,7 @@ function compareBodies(
   path: string,
   errors: string[],
   warnings: string[],
+  replacements?: ReplacementStore,
 ) {
   if (typeof expected === "string") {
     const match = expected.match(/^\{\{var:([A-Z0-9_:-]+)\}\}$/);
@@ -785,6 +899,7 @@ function compareBodies(
         `${path}[${index}]`,
         errors,
         warnings,
+        replacements,
       );
     });
     return;
@@ -812,32 +927,36 @@ function compareBodies(
         childPath,
         errors,
         warnings,
+        replacements,
       );
     }
     return;
   }
 
-  if (expected !== actual) {
+  // Replace UUIDs in expected value if replacements are provided
+  const expectedValue = replacements ? replaceUUIDsInValue(expected, replacements) : expected;
+
+  if (expectedValue !== actual) {
     // Check if this field should use special matching
     const matcher = selectMatcherForPath(path);
     
     if (matcher && matcher.strategy === "ignore") {
       // Silently ignore differences for this field
       return;
-    } else if (matcher && matcher.strategy === "fuzzy" && typeof expected === "string" && typeof actual === "string") {
+    } else if (matcher && matcher.strategy === "fuzzy" && typeof expectedValue === "string" && typeof actual === "string") {
       const threshold = matcher.threshold ?? FUZZY_MATCH_THRESHOLD;
-      const result = matchFuzzy(expected, actual, threshold);
+      const result = matchFuzzy(expectedValue, actual, threshold);
       
       if (result.matches) {
         // Add warning instead of error for fuzzy matches
         warnings.push(
-          `⚠️  ${path}: ${result.message}\n  Expected: ${formatValueForDisplay(expected)}\n  Received: ${formatValueForDisplay(actual)}`
+          `⚠️  ${path}: ${result.message}\n  Expected: ${formatValueForDisplay(expectedValue)}\n  Received: ${formatValueForDisplay(actual)}`
         );
       } else {
         // Add error for fuzzy match failures
         errors.push(
-          `${path}: ${result.message}\n  Expected: ${getTypeDescription(expected)} ${
-            formatValueForDisplay(expected)
+          `${path}: ${result.message}\n  Expected: ${getTypeDescription(expectedValue)} ${
+            formatValueForDisplay(expectedValue)
           }\n  Received: ${getTypeDescription(actual)} ${
             formatValueForDisplay(actual)
           }`,
@@ -846,8 +965,8 @@ function compareBodies(
     } else {
       // Use exact matching for non-fuzzy fields
       errors.push(
-        `${path}:\n  Expected: ${getTypeDescription(expected)} ${
-          formatValueForDisplay(expected)
+        `${path}:\n  Expected: ${getTypeDescription(expectedValue)} ${
+          formatValueForDisplay(expectedValue)
         }\n  Received: ${getTypeDescription(actual)} ${
           formatValueForDisplay(actual)
         }`,
@@ -861,6 +980,7 @@ async function replayRequest(
   config: RuntimeConfig,
   tokens: Tokens,
   variables: PlaceholderStore,
+  replacements?: ReplacementStore,
 ): Promise<
   { ok: boolean; errors: string[]; warnings: string[]; response: Response; body: unknown }
 > {
@@ -868,6 +988,7 @@ async function replayRequest(
   const queryParams = resolvePlaceholdersInQuery(
     entry.request.query ?? {},
     variables,
+    replacements,
   );
 
   // Apply delay if configured
@@ -881,7 +1002,7 @@ async function replayRequest(
     url.searchParams.append(key, value);
   });
 
-  const { body, headers: bodyHeaders } = buildRequestBody(entry, variables);
+  const { body, headers: bodyHeaders } = buildRequestBody(entry, variables, replacements);
   const headers = buildAuthHeaders(tokens, bodyHeaders);
 
   const response = await fetch(url.toString(), {
@@ -918,7 +1039,7 @@ async function replayRequest(
     }
   }
 
-  compareBodies(entry.response.body, parsedBody, variables, "$", errors, warnings);
+  compareBodies(entry.response.body, parsedBody, variables, "$", errors, warnings, replacements);
 
   return { ok: errors.length === 0, errors, warnings, response, body: parsedBody };
 }
@@ -935,6 +1056,9 @@ async function replayArtifact(
     string,
     PlaceholderValue
   >();
+  
+  // Create UUID replacement mapping
+  const replacements = scanForReplacementValues(artifact);
   const stats: ReplayStats = {
     total: artifact.requests.length,
     passed: 0,
@@ -960,6 +1084,7 @@ async function replayArtifact(
         config,
         tokens,
         runtimeVariables,
+        replacements,
       );
       if (result.ok) {
         stats.passed += 1;
