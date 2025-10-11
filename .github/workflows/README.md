@@ -4,45 +4,29 @@ This directory contains GitHub Actions workflows for automatically deploying Sup
 
 ## Workflows
 
-### `deploy-edge-functions.yml`
+### `deploy-edge-functions-prod.yml`
 
-Automatically deploys the `ingredicheck` and `background` edge functions to Supabase whenever changes are pushed to the `main` branch.
+Deploys the `ingredicheck` and `background` edge functions to the production Supabase project whenever changes are pushed to the `main` branch.
 
 **Triggers:**
-- Push to `main` branch (only when files in `supabase/functions/` change)
+- Push to `main` branch (when files in `supabase/functions/` or this workflow change)
 - Manual workflow dispatch
 
 **Functions Deployed:**
 - `ingredicheck` - Main API function with ingredient analysis, extraction, and user management
 - `background` - Background logging and data processing function
 
-## Required GitHub Secrets
+## Required GitHub Environment Variables
 
-Before the workflow can run, you must configure the following secrets in your GitHub repository:
+Configure these on the repository’s **PROD** environment (Settings → Environments → PROD → Configure):
 
-### 1. `SUPABASE_ACCESS_TOKEN`
-- **Description**: Personal access token for Supabase CLI authentication
-- **How to get**: 
-  1. Go to [Supabase Dashboard](https://supabase.com/dashboard)
-  2. Navigate to Account Settings → Access Tokens
-  3. Click "Generate new token"
-  4. Give it a descriptive name (e.g., "GitHub Actions CI/CD")
-  5. Copy the generated token
+### Secrets
+- `SUPABASE_ACCESS_TOKEN`
+  - Personal access token for Supabase CLI authentication.
 
-### 2. `SUPABASE_PROJECT_REF`
-- **Description**: Your Supabase project reference ID
-- **How to get**:
-  1. Go to your Supabase project dashboard
-  2. Navigate to Settings → General
-  3. Copy the "Reference ID" (looks like: `abcdefghijklmnop`)
-
-## Setting Up GitHub Secrets
-
-1. Go to your GitHub repository
-2. Click on **Settings** tab
-3. In the left sidebar, click **Secrets and variables** → **Actions**
-4. Click **New repository secret**
-5. Add each secret with the exact names listed above
+### Variables
+- `SUPABASE_PROJECT_REF`
+  - Supabase project reference ID (Settings → General in the Supabase dashboard).
 
 ## Workflow Features
 
