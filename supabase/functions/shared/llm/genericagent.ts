@@ -59,11 +59,39 @@ export async function genericAgent(
     );
 
     const response = await fetch(endpoint, init);
-    const responseJson = await response.json();
+    const responseText = await response.text();
+    let responseJson: Record<string, unknown> = {};
+    try {
+      responseJson = responseText ? JSON.parse(responseText) : {};
+    } catch (error) {
+      console.error("genericAgent: failed to parse response JSON", {
+        endpoint,
+        status: response.status,
+        responseText,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      responseJson = {};
+    }
+
+    if (!response.ok) {
+      console.error("genericAgent: upstream request failed", {
+        endpoint,
+        status: response.status,
+        responseText,
+      });
+    }
 
     const { message: assistantMessage, finishReason } = program
       .parseAssistantMessage(responseJson);
     messages.push(assistantMessage);
+
+    if (!assistantMessage.content && (responseJson.error || !response.ok)) {
+      console.error("genericAgent: empty assistant response", {
+        endpoint,
+        status: response.status,
+        responseJson,
+      });
+    }
 
     logs.push({
       id: crypto.randomUUID(),
