@@ -658,6 +658,78 @@ function calculateStringSimilarity(str1: string, str2: string): number {
   return maxLen === 0 ? 1.0 : (maxLen - distance) / maxLen;
 }
 
+function tokenize(value: string): string[] {
+  return value
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function calculateTokenSetSimilarity(str1: string, str2: string): number {
+  const tokens1 = tokenize(str1);
+  const tokens2 = tokenize(str2);
+
+  if (tokens1.length === 0 || tokens2.length === 0) {
+    return 0.0;
+  }
+
+  const counts1 = new Map<string, number>();
+  const counts2 = new Map<string, number>();
+
+  for (const token of tokens1) {
+    counts1.set(token, (counts1.get(token) ?? 0) + 1);
+  }
+  for (const token of tokens2) {
+    counts2.set(token, (counts2.get(token) ?? 0) + 1);
+  }
+
+  let intersection = 0;
+  for (const [token, count1] of counts1) {
+    const count2 = counts2.get(token);
+    if (count2 !== undefined) {
+      intersection += Math.min(count1, count2);
+    }
+  }
+
+  const minLength = Math.min(tokens1.length, tokens2.length);
+  return minLength === 0 ? 0.0 : intersection / minLength;
+}
+
+function calculateLcsSimilarity(str1: string, str2: string): number {
+  const s1 = str1.trim();
+  const s2 = str2.trim();
+
+  if (s1 === s2) return 1.0;
+  if (s1.length === 0 || s2.length === 0) return 0.0;
+
+  const len1 = s1.length;
+  const len2 = s2.length;
+
+  if (len1 * len2 > 250000) {
+    return 0.0;
+  }
+
+  let prev = new Uint32Array(len2 + 1);
+  let curr = new Uint32Array(len2 + 1);
+
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      if (s1[i - 1] === s2[j - 1]) {
+        curr[j] = prev[j - 1] + 1;
+      } else {
+        curr[j] = Math.max(prev[j], curr[j - 1]);
+      }
+    }
+    [prev, curr] = [curr, prev];
+    curr.fill(0);
+  }
+
+  const lcsLength = prev[len2];
+  return Math.min(len1, len2) === 0 ? 0.0 : lcsLength / Math.min(len1, len2);
+}
+
 // Select appropriate matcher for a given path
 function selectMatcherForPath(path: string): FieldMatcher | null {
   for (const matcher of FIELD_MATCHERS) {
@@ -690,15 +762,19 @@ function selectDelayForRequest(method: string, path: string): number {
 
 // Fuzzy matching with threshold
 function matchFuzzy(expected: string, actual: string, threshold: number): MatchResult {
-  const similarity = calculateStringSimilarity(expected, actual);
+  const levenshtein = calculateStringSimilarity(expected, actual);
+  const lcs = calculateLcsSimilarity(expected, actual);
+  const tokenSet = calculateTokenSetSimilarity(expected, actual);
+  const similarity = Math.max(levenshtein, lcs, tokenSet);
   const matches = similarity >= threshold;
-  
+  const details = `scores — levenshtein ${(levenshtein * 100).toFixed(1)}%, lcs ${(lcs * 100).toFixed(1)}%, tokens ${(tokenSet * 100).toFixed(1)}%`;
+
   return {
     matches,
     similarity,
-    message: matches 
-      ? `Fuzzy matched (${(similarity * 100).toFixed(1)}% similar)`
-      : `Fuzzy match failed (${(similarity * 100).toFixed(1)}% similar, threshold: ${(threshold * 100).toFixed(1)}%)`
+    message: matches
+      ? `Fuzzy matched (${(similarity * 100).toFixed(1)}% similar; ${details})`
+      : `Fuzzy match failed (${(similarity * 100).toFixed(1)}% similar, threshold: ${(threshold * 100).toFixed(1)}%; ${details})`
   };
 }
 
