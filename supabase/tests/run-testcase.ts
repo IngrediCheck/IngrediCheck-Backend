@@ -1,7 +1,6 @@
 #!/usr/bin/env -S deno run --allow-env --allow-net --allow-read
 
 import { basename, dirname, fromFileUrl, join } from "std/path";
-import { parse } from "std/flags";
 import {
   type AuthTokens,
   buildAuthHeaders,
@@ -360,6 +359,45 @@ function parseSelection(input: string, maxCount: number): number[] {
   return Array.from(selections).sort((a, b) => a - b);
 }
 
+function selectCasesFromArgument(
+  cases: TestCase[],
+  argument: string,
+): TestCase[] {
+  const trimmed = argument.trim();
+  if (trimmed.length === 0) {
+    console.log("Running all test cases");
+    return cases;
+  }
+
+  if (trimmed.toLowerCase() === "all") {
+    console.log("Running all test cases");
+    return cases;
+  }
+
+  const indices = parseSelection(trimmed, cases.length);
+  if (indices.length === 0) {
+    throw new Error("No valid selections were provided.");
+  }
+
+  const selectedCases = indices.map((index) => {
+    const selected = cases[index - 1];
+    if (!selected) {
+      throw new Error(
+        `Selection ${index} is out of range (1-${cases.length}).`,
+      );
+    }
+    return selected;
+  });
+
+  console.log(
+    `Running ${selectedCases.length} selected test case(s): ${
+      selectedCases.map((c) => c.displayName).join(", ")
+    }`,
+  );
+
+  return selectedCases;
+}
+
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
@@ -368,30 +406,30 @@ function ensureTrailingSlash(value: string): string {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-async function loadConfig(): Promise<RuntimeConfig> {
-  const args = parse(Deno.args, {
-    string: ["base-url", "functions-url", "anon-key"],
-    boolean: ["stop-on-failure"],
-    default: { "stop-on-failure": false },
-  });
+function parseBoolean(value: string | undefined): boolean | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "") return undefined;
+  if (["1", "true", "yes", "y", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "n", "off"].includes(normalized)) return false;
+  return undefined;
+}
 
+async function loadConfig(): Promise<RuntimeConfig> {
   // Try to load local environment state first
   const localState = await loadState();
 
-  const baseUrlInput = (args["base-url"] as string | undefined) ??
-    localState?.baseUrl ??
+  const baseUrlInput = localState?.baseUrl ??
     Deno.env.get("SUPABASE_BASE_URL") ?? "";
-  const anonKey = (args["anon-key"] as string | undefined) ??
-    localState?.anonKey ??
+  const anonKey = localState?.anonKey ??
     Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-  const functionsUrlInput = (args["functions-url"] as string | undefined) ??
-    localState?.functionsUrl ??
+  const functionsUrlInput = localState?.functionsUrl ??
     Deno.env.get("SUPABASE_FUNCTIONS_URL") ??
     `${trimTrailingSlash(baseUrlInput)}/functions/v1`;
 
   const missing: string[] = [];
-  if (!baseUrlInput) missing.push("--base-url or SUPABASE_BASE_URL");
-  if (!anonKey) missing.push("--anon-key or SUPABASE_ANON_KEY");
+  if (!baseUrlInput) missing.push("SUPABASE_BASE_URL");
+  if (!anonKey) missing.push("SUPABASE_ANON_KEY");
   if (missing.length > 0) {
     console.error(
       `Error: Missing required configuration: ${missing.join(", ")}`,
@@ -403,11 +441,13 @@ async function loadConfig(): Promise<RuntimeConfig> {
     console.log("🔗 Using local Supabase environment");
   }
 
+  const stopOnFailureEnv = parseBoolean(Deno.env.get("RUN_TESTCASE_STOP_ON_FAILURE"));
+
   return {
     baseUrl: trimTrailingSlash(baseUrlInput),
     functionsBaseUrl: ensureTrailingSlash(trimTrailingSlash(functionsUrlInput)),
     anonKey,
-    stopOnFailure: Boolean(args["stop-on-failure"]),
+    stopOnFailure: stopOnFailureEnv ?? false,
   };
 }
 
@@ -1237,9 +1277,23 @@ async function replayArtifact(
 }
 
 async function run() {
+  const selectionArg = Deno.args.length === 0 ? undefined : Deno.args.join(",");
   const config = await loadConfig();
   const testCases = await discoverTestCases();
-  const selectedCases = await promptTestCaseSelection(testCases);
+  let selectedCases: TestCase[];
+
+  if (selectionArg !== undefined) {
+    try {
+      selectedCases = selectCasesFromArgument(testCases, selectionArg);
+    } catch (error) {
+      console.error(
+        `Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      Deno.exit(1);
+    }
+  } else {
+    selectedCases = await promptTestCaseSelection(testCases);
+  }
 
   const totals: ReplayStats = { total: 0, passed: 0, failed: 0 };
 
