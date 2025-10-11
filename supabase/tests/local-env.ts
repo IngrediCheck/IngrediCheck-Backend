@@ -542,6 +542,12 @@ async function setupCommand(): Promise<void> {
   console.log("8️⃣ Creating local Edge Functions environment...");
   console.log("   ⚠️  NOT using 'supabase secrets set' to avoid affecting remote!");
   await createLocalFunctionsEnv();
+
+  const apisToCheck = ["OPENAI_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY"];
+  for (const key of apisToCheck) {
+    const value = Deno.env.get(key);
+    console.log(`   ${key} length: ${value ? value.length : 0}`);
+  }
   
   // 9. Health checks (functions are already served by main stack)
   console.log("9️⃣ Waiting for services to be ready...");
