@@ -1,4 +1,5 @@
 import { dirname, fromFileUrl, join } from "std/path";
+import { parse as parseDotenv } from "std/dotenv";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 type EnvLoadOptions = {
@@ -27,23 +28,7 @@ const DEFAULT_ENV_CANDIDATES = [
 
 async function parseEnvFile(path: string): Promise<Record<string, string>> {
   const contents = await Deno.readTextFile(path);
-  const entries: Record<string, string> = {};
-  for (const rawLine of contents.split("\n")) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) {
-      continue;
-    }
-    const separatorIndex = line.indexOf("=");
-    if (separatorIndex === -1) {
-      continue;
-    }
-    const key = line.slice(0, separatorIndex).trim();
-    const value = line.slice(separatorIndex + 1).trim();
-    if (key) {
-      entries[key] = value;
-    }
-  }
-  return entries;
+  return parseDotenv(contents);
 }
 
 export async function loadEnv(
