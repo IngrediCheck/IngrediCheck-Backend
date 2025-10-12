@@ -712,10 +712,6 @@ function determineResponseBodyType(response: RecordedRequest["response"]): Respo
     }
   }
 
-  if (looksLikeRecordedSseEvents(body)) {
-    return "sse";
-  }
-
   return "json";
 }
 
