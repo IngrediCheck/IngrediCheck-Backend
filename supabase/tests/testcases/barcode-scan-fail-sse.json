@@ -1,0 +1,33 @@
+{
+  "recordingSessionId": "2025-10-12-0415-barcode-scan-fail-sse",
+  "recordedUserId": "ad24f56d-1e60-4a9a-a2bc-2f00ca0d95ae",
+  "exportedAt": "2025-10-12T04:15:23.749Z",
+  "totalEntries": 1,
+  "testCase": "barcode-scan-fail-sse",
+  "requests": [
+    {
+      "recordedAt": "2025-10-12T04:15:18.595942+00:00",
+      "request": {
+        "method": "POST",
+        "path": "/ingredicheck/analyze-stream",
+        "query": {},
+        "bodyType": "form-data",
+        "body": {
+          "files": [],
+          "fields": {
+            "barcode": "0842379192234",
+            "clientActivityId": "C45FFB8C-26E8-48E0-A2B5-9C57610B75AA",
+            "userPreferenceText": "None"
+          }
+        }
+      },
+      "response": {
+        "status": 404,
+        "bodyType": "json",
+        "body": {
+          "error": "Product not found: 0842379192234"
+        }
+      }
+    }
+  ]
+}

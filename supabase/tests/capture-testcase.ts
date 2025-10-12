@@ -268,10 +268,58 @@ type RecordingArtifact = {
     };
     response: {
       status: number;
+      bodyType: "json" | "text" | "bytes" | "empty" | "sse";
       body: unknown;
     };
   }>;
 };
+
+type NormalizedResponseBody = {
+  bodyType: "json" | "text" | "bytes" | "empty" | "sse";
+  body: unknown;
+};
+
+function looksLikeSsePayload(value: unknown): boolean {
+  return Array.isArray(value) &&
+    value.every((item) =>
+      isPlainObject(item) && typeof item.event === "string"
+    );
+}
+
+function normalizeResponseBody(raw: unknown): NormalizedResponseBody {
+  if (raw === null || raw === undefined) {
+    return { bodyType: "empty", body: null };
+  }
+
+  if (typeof raw === "string") {
+    return { bodyType: "text", body: raw };
+  }
+
+  if (isPlainObject(raw)) {
+    const record = raw as Record<string, unknown>;
+    const typeValue = record["type"];
+    const type = typeof typeValue === "string" ? typeValue : undefined;
+    const payload = record["payload"];
+    const value = record["value"];
+
+    if (type === "sse" && looksLikeSsePayload(payload)) {
+      return {
+        bodyType: "sse",
+        body: payload as Array<{ event: string; data: unknown }>,
+      };
+    }
+
+    if (type === "bytes" && typeof value === "string") {
+      return { bodyType: "bytes", body: value };
+    }
+
+    if (type === "empty") {
+      return { bodyType: "empty", body: null };
+    }
+  }
+
+  return { bodyType: "json", body: raw };
+}
 
 function buildArtifact(
   options: CaptureOptions,
@@ -294,7 +342,7 @@ function buildArtifact(
       },
       response: {
         status: row.response_status,
-        body: row.response_body,
+        ...normalizeResponseBody(row.response_body),
       },
     })),
   };
@@ -310,7 +358,7 @@ function injectVariablePlaceholders(artifact: RecordingArtifact) {
 
   for (const entry of artifact.requests) {
     collectIds(entry.request.body, idMap, counter);
-    collectIds(entry.response.body, idMap, counter);
+    collectIdsFromResponse(entry.response.bodyType, entry.response.body, idMap, counter);
   }
 
   if (idMap.size === 0) {
@@ -324,12 +372,34 @@ function injectVariablePlaceholders(artifact: RecordingArtifact) {
       idMap,
     ) as Record<string, string>;
     entry.request.body = applyPlaceholders(entry.request.body, idMap);
-    entry.response.body = applyPlaceholders(entry.response.body, idMap);
+    entry.response.body = applyPlaceholdersToResponse(
+      entry.response.bodyType,
+      entry.response.body,
+      idMap,
+    );
   }
 
   artifact.variables = Object.fromEntries(
     Array.from(idMap.entries()).map(([value, token]) => [token, value]),
   );
+}
+
+function collectIdsFromResponse(
+  bodyType: NormalizedResponseBody["bodyType"],
+  body: unknown,
+  map: Map<string, string>,
+  counter: { value: number },
+) {
+  if (bodyType === "sse" && Array.isArray(body)) {
+    for (const event of body) {
+      if (isPlainObject(event) && "data" in event) {
+        collectIds((event as Record<string, unknown>).data, map, counter);
+      }
+    }
+    return;
+  }
+
+  collectIds(body, map, counter);
 }
 
 function collectIds(
@@ -402,6 +472,27 @@ function replacePathSegments(path: string, map: Map<string, string>): string {
       return token ? `{{var:${token}}}` : segment;
     })
     .join("/");
+}
+
+function applyPlaceholdersToResponse(
+  bodyType: NormalizedResponseBody["bodyType"],
+  body: unknown,
+  map: Map<string, string>,
+): unknown {
+  if (bodyType === "sse" && Array.isArray(body)) {
+    return body.map((event) => {
+      if (!isPlainObject(event)) {
+        return event;
+      }
+      const result: Record<string, unknown> = { ...event };
+      if ("data" in result) {
+        result.data = applyPlaceholders(result.data, map);
+      }
+      return result;
+    });
+  }
+
+  return applyPlaceholders(body, map);
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

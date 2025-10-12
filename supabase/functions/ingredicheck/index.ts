@@ -2,6 +2,7 @@ import { Application, Router, Context } from 'https://deno.land/x/oak@v12.6.0/mo
 import { createClient } from '@supabase/supabase-js'
 import * as KitchenSink from '../shared/kitchensink.ts'
 import * as Analyzer from './analyzer.ts'
+import * as AnalyzerV2 from './analyzerv2.ts'
 import * as Extractor from './extractor.ts'
 import * as Inventory from './inventory.ts'
 import * as Feedback from './feedback.ts'
@@ -35,6 +36,7 @@ type CapturedBody =
     | { type: 'text'; payload: string }
     | { type: 'bytes'; payload: string }
     | { type: 'empty'; payload: null }
+    | { type: 'sse'; payload: Array<{ event: string; data: unknown }> }
 
 function toBase64(bytes: Uint8Array): string {
     let binary = ''
@@ -130,6 +132,92 @@ function serializeResponseBody(body: unknown): unknown {
     }
 }
 
+type CapturedSseEvent = { event: string; data: unknown }
+
+function isReadableStream(value: unknown): value is ReadableStream<Uint8Array> {
+    return value instanceof ReadableStream
+}
+
+function extractSseEventsFromBuffer(buffer: string, events: CapturedSseEvent[]): string {
+    let working = buffer
+
+    while (true) {
+        const separatorIndex = working.indexOf('\n\n')
+        if (separatorIndex === -1) {
+            break
+        }
+
+        const rawBlock = working.slice(0, separatorIndex)
+        working = working.slice(separatorIndex + 2)
+
+        const normalized = rawBlock.replace(/\r/g, '')
+        if (!normalized.trim()) {
+            continue
+        }
+
+        const lines = normalized.split('\n')
+        let eventName = 'message'
+        const dataLines: string[] = []
+
+        for (const line of lines) {
+            if (!line) continue
+            const colonIndex = line.indexOf(':')
+            const field = colonIndex === -1 ? line : line.slice(0, colonIndex)
+            const value = colonIndex === -1 ? '' : line.slice(colonIndex + 1).replace(/^\s*/, '')
+
+            switch (field.trim()) {
+                case 'event':
+                    if (value.length > 0) {
+                        eventName = value
+                    }
+                    break
+                case 'data':
+                    dataLines.push(value)
+                    break
+                default:
+                    break
+            }
+        }
+
+        const rawData = dataLines.join('\n')
+        let parsed: unknown = rawData
+        if (rawData.length === 0) {
+            parsed = null
+        } else {
+            try {
+                parsed = JSON.parse(rawData)
+            } catch (_error) {
+                parsed = rawData
+            }
+        }
+
+        events.push({ event: eventName, data: parsed })
+    }
+
+    return working
+}
+
+async function collectSseEvents(stream: ReadableStream<Uint8Array>): Promise<CapturedSseEvent[]> {
+    const events: CapturedSseEvent[] = []
+    const reader = stream.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+        const { done, value } = await reader.read()
+        if (done) {
+            break
+        }
+        buffer += decoder.decode(value, { stream: true })
+        buffer = extractSseEventsFromBuffer(buffer, events)
+    }
+
+    buffer += decoder.decode()
+    extractSseEventsFromBuffer(buffer, events)
+
+    return events
+}
+
 app.use(async (ctx, next) => {
     const recordingUserId = Deno.env.get('RECORDING_USER_ID') ?? ''
     const recordingSessionId = Deno.env.get('RECORDING_SESSION_ID') ?? ''
@@ -156,7 +244,25 @@ app.use(async (ctx, next) => {
 
     await next()
 
-    const responseBody = serializeResponseBody(ctx.response.body)
+    let responseBody: unknown
+    const contentType = ctx.response.headers.get('Content-Type') ?? ctx.response.headers.get('content-type') ?? ''
+    const shouldCaptureSse = contentType.toLowerCase().includes('text/event-stream') && isReadableStream(ctx.response.body)
+
+    if (shouldCaptureSse) {
+        const originalStream = ctx.response.body as ReadableStream<Uint8Array>
+        const [clientStream, captureStream] = originalStream.tee()
+        ctx.response.body = clientStream
+        try {
+            const events = await collectSseEvents(captureStream)
+            responseBody = { type: 'sse', payload: events }
+        } catch (error) {
+            console.error('Failed to collect SSE events for recording', error)
+            responseBody = { type: 'sse', payload: [] }
+        }
+    } else {
+        responseBody = serializeResponseBody(ctx.response.body)
+    }
+
     const requestBodyPayload = bodyContainer.body ?? { type: 'empty', payload: null }
 
     try {
@@ -210,6 +316,9 @@ router
     })
     .post('/ingredicheck/analyze', async (ctx) => {
         await Analyzer.analyze(ctx)
+    })
+    .post('/ingredicheck/analyze-stream', async (ctx) => {
+        await AnalyzerV2.analyzeV2(ctx)
     })
     .post('/ingredicheck/extract', async (ctx) => {
         await Extractor.extract(ctx)

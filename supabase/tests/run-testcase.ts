@@ -19,6 +19,8 @@ type RecordingArtifact = {
   requests: RecordedRequest[];
 };
 
+type ResponseBodyType = "json" | "text" | "bytes" | "empty" | "sse";
+
 type RecordedRequest = {
   recordedAt: string;
   request: {
@@ -30,6 +32,7 @@ type RecordedRequest = {
   };
   response: {
     status: number;
+    bodyType?: ResponseBodyType;
     body: unknown;
   };
 };
@@ -546,6 +549,18 @@ function decodeBase64(value: string): Uint8Array {
   return bytes;
 }
 
+function encodeBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 type BuiltRequestBody = {
   body?: BodyInit;
   headers: HeadersInit;
@@ -653,6 +668,55 @@ function buildRequestBody(
   }
 
   throw new Error(`Unsupported body type: ${bodyType}`);
+}
+
+function looksLikeRecordedSseEvents(value: unknown): value is Array<{ event: string; data: unknown }> {
+  return Array.isArray(value) &&
+    value.every((item) =>
+      isPlainObject(item) && typeof item.event === "string"
+    );
+}
+
+function determineResponseBodyType(response: RecordedRequest["response"]): ResponseBodyType {
+  if (response.bodyType) {
+    return response.bodyType;
+  }
+
+  const { body } = response;
+
+  if (body === null || body === undefined) {
+    return "empty";
+  }
+
+  if (typeof body === "string") {
+    return "text";
+  }
+
+  if (isPlainObject(body)) {
+    const record = body as Record<string, unknown>;
+    const typeValue = record["type"];
+    const type = typeof typeValue === "string" ? typeValue : undefined;
+    const payload = record["payload"];
+    const value = record["value"];
+
+    if (type === "sse" && looksLikeRecordedSseEvents(payload)) {
+      return "sse";
+    }
+
+    if (type === "bytes" && typeof value === "string") {
+      return "bytes";
+    }
+
+    if (type === "empty") {
+      return "empty";
+    }
+  }
+
+  if (looksLikeRecordedSseEvents(body)) {
+    return "sse";
+  }
+
+  return "json";
 }
 
 function coerceToString(value: unknown): string {
@@ -929,10 +993,15 @@ function formatRequestDetails(entry: RecordedRequest): string {
   return lines.join("\n");
 }
 
-function formatResponseDetails(status: number, body: unknown): string {
+function formatResponseDetails(
+  status: number,
+  body: unknown,
+  bodyType?: ResponseBodyType,
+): string {
   const lines: string[] = [];
   lines.push(`• Status: ${status}`);
-  lines.push(`• Body: ${formatValueForDisplay(body, 200)}`);
+  const bodyLabel = bodyType ? `• Body: (${bodyType})` : "• Body:";
+  lines.push(`${bodyLabel} ${formatValueForDisplay(body, 200)}`);
   return lines.join("\n");
 }
 
@@ -1091,6 +1160,146 @@ function compareBodies(
   }
 }
 
+type RecordedSseEvent = { event: string; data: unknown };
+
+function extractEventsFromBuffer(
+  buffer: string,
+  events: RecordedSseEvent[],
+): string {
+  let working = buffer;
+
+  while (true) {
+    const separatorIndex = working.indexOf("\n\n");
+    if (separatorIndex === -1) {
+      break;
+    }
+
+    const rawBlock = working.slice(0, separatorIndex);
+    working = working.slice(separatorIndex + 2);
+
+    const normalized = rawBlock.replace(/\r/g, "");
+    if (!normalized.trim()) {
+      continue;
+    }
+
+    const lines = normalized.split("\n");
+    let eventName = "message";
+    const dataLines: string[] = [];
+
+    for (const line of lines) {
+      if (!line) continue;
+      const colonIndex = line.indexOf(":");
+      const field = colonIndex === -1 ? line : line.slice(0, colonIndex);
+      const value = colonIndex === -1 ? "" : line.slice(colonIndex + 1).replace(/^\s*/, "");
+
+      switch (field.trim()) {
+        case "event":
+          if (value.length > 0) {
+            eventName = value;
+          }
+          break;
+        case "data":
+          dataLines.push(value);
+          break;
+        default:
+          break;
+      }
+    }
+
+    const rawData = dataLines.join("\n");
+    let parsed: unknown = rawData;
+    if (rawData.length === 0) {
+      parsed = null;
+    } else {
+      try {
+        parsed = JSON.parse(rawData);
+      } catch (_error) {
+        parsed = rawData;
+      }
+    }
+
+    events.push({ event: eventName, data: parsed });
+  }
+
+  return working;
+}
+
+async function parseSSEStream(stream: ReadableStream<Uint8Array>): Promise<RecordedSseEvent[]> {
+  const events: RecordedSseEvent[] = [];
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    buffer = extractEventsFromBuffer(buffer, events);
+  }
+
+  buffer += decoder.decode();
+  extractEventsFromBuffer(buffer, events);
+
+  return events;
+}
+
+function compareSSEEvents(
+  expected: unknown,
+  actual: RecordedSseEvent[],
+  variables: PlaceholderStore,
+  errors: string[],
+  warnings: string[],
+  replacements?: ReplacementStore,
+) {
+  if (!Array.isArray(expected)) {
+    errors.push("Expected SSE response body to be an array of events");
+    return;
+  }
+
+  if (expected.length !== actual.length) {
+    errors.push(
+      `SSE events length mismatch. Expected ${expected.length}, received ${actual.length}`,
+    );
+    return;
+  }
+
+  expected.forEach((expectedEvent, index) => {
+    const actualEvent = actual[index];
+    if (!isPlainObject(expectedEvent)) {
+      errors.push(`SSE event[${index}] is not an object in expected recording`);
+      return;
+    }
+
+    const expectedRecord = expectedEvent as Record<string, unknown>;
+    const expectedName = expectedRecord.event;
+    const expectedData = expectedRecord.data;
+
+    if (typeof expectedName !== "string") {
+      errors.push(`SSE event[${index}] is missing its event name in recording`);
+      return;
+    }
+
+    if (expectedName !== actualEvent.event) {
+      errors.push(
+        `SSE event[${index}]: expected "${expectedName}" but received "${actualEvent.event}"`,
+      );
+      return;
+    }
+
+    compareBodies(
+      expectedData,
+      actualEvent.data,
+      variables,
+      `$.response.body[${index}].data`,
+      errors,
+      warnings,
+      replacements,
+    );
+  });
+}
+
 async function replayRequest(
   entry: RecordedRequest,
   config: RuntimeConfig,
@@ -1098,7 +1307,7 @@ async function replayRequest(
   variables: PlaceholderStore,
   replacements?: ReplacementStore,
 ): Promise<
-  { ok: boolean; errors: string[]; warnings: string[]; response: Response; body: unknown }
+  { ok: boolean; errors: string[]; warnings: string[]; response: Response; body: unknown; bodyType: ResponseBodyType }
 > {
   const resolvedPath = resolvePlaceholdersInPath(entry.request.path, variables);
   const queryParams = resolvePlaceholdersInQuery(
@@ -1129,6 +1338,10 @@ async function replayRequest(
 
   const errors: string[] = [];
   const warnings: string[] = [];
+  const expectedResponseType = determineResponseBodyType(entry.response);
+  let actualBodyType: ResponseBodyType = expectedResponseType;
+  const contentTypeHeader = response.headers.get("content-type") ?? "";
+  const normalizedContentType = contentTypeHeader.toLowerCase();
   if (response.status !== entry.response.status) {
     errors.push(
       `status: expected ${entry.response.status}, received ${response.status}`,
@@ -1136,28 +1349,104 @@ async function replayRequest(
   }
 
   let parsedBody: unknown = null;
-  if (response.status !== 204) {
-    const contentType = response.headers.get("content-type") ?? "";
-    const text = await response.text();
+  if (expectedResponseType === "sse") {
+    const bodyStream = response.body;
+    if (!normalizedContentType.includes("text/event-stream")) {
+      warnings.push(
+        `⚠️  Response content-type "${contentTypeHeader}" does not match expected SSE stream`,
+      );
+    }
+    if (!bodyStream) {
+      errors.push("body: expected SSE stream but response had no readable body");
+    } else {
+      const events = await parseSSEStream(bodyStream);
+      parsedBody = events;
+      actualBodyType = "sse";
+      compareSSEEvents(
+        entry.response.body,
+        events,
+        variables,
+        errors,
+        warnings,
+        replacements,
+      );
+    }
+  } else if (expectedResponseType === "bytes") {
+    const buffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    parsedBody = encodeBase64(bytes);
+    actualBodyType = "bytes";
+    compareBodies(
+      entry.response.body,
+      parsedBody,
+      variables,
+      "$",
+      errors,
+      warnings,
+      replacements,
+    );
+  } else if (expectedResponseType === "empty") {
+    if (response.status === 204) {
+      parsedBody = null;
+      actualBodyType = "empty";
+      compareBodies(
+        entry.response.body,
+        parsedBody,
+        variables,
+        "$",
+        errors,
+        warnings,
+        replacements,
+      );
+    } else {
+      const text = await response.text();
+      parsedBody = text || null;
+      actualBodyType = text ? "text" : "empty";
+      compareBodies(
+        entry.response.body,
+        parsedBody,
+        variables,
+        "$",
+        errors,
+        warnings,
+        replacements,
+      );
+    }
+  } else {
+    const text = response.status === 204 ? "" : await response.text();
     if (!text) {
       parsedBody = null;
+      actualBodyType = "empty";
     } else if (
-      contentType.includes("application/json") || contentType.includes("+json")
+      normalizedContentType.includes("application/json") ||
+      normalizedContentType.includes("+json") ||
+      expectedResponseType === "json"
     ) {
       try {
         parsedBody = JSON.parse(text);
+        actualBodyType = "json";
       } catch (_error) {
         errors.push("body: failed to parse JSON response");
         parsedBody = text;
+        actualBodyType = "text";
       }
     } else {
       parsedBody = text;
+      actualBodyType = "text";
     }
+
+    compareBodies(
+      entry.response.body,
+      parsedBody,
+      variables,
+      "$",
+      errors,
+      warnings,
+      replacements,
+    );
   }
 
-  compareBodies(entry.response.body, parsedBody, variables, "$", errors, warnings, replacements);
-
-  return { ok: errors.length === 0, errors, warnings, response, body: parsedBody };
+  return { ok: errors.length === 0, errors, warnings, response, body: parsedBody, bodyType: actualBodyType };
 }
 
 async function replayArtifact(
@@ -1224,7 +1513,11 @@ async function replayArtifact(
         console.error("   Expected Response:");
         console.error(
           `   ${
-            formatResponseDetails(step.response.status, step.response.body)
+            formatResponseDetails(
+              step.response.status,
+              step.response.body,
+              determineResponseBodyType(step.response),
+            )
               .replace(/\n/g, "\n   ")
           }`,
         );
@@ -1232,7 +1525,11 @@ async function replayArtifact(
         console.error("   Actual Response:");
         console.error(
           `   ${
-            formatResponseDetails(result.response.status, result.body).replace(
+            formatResponseDetails(
+              result.response.status,
+              result.body,
+              result.bodyType,
+            ).replace(
               /\n/g,
               "\n   ",
             )

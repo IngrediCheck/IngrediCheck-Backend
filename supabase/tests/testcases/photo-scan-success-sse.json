@@ -1,0 +1,119 @@
+{
+  "recordingSessionId": "2025-10-12-0428-photo-scan-success-sse",
+  "recordedUserId": "c65534cd-6710-4c17-8a7b-54d2c3ec51f9",
+  "exportedAt": "2025-10-12T04:29:13.612Z",
+  "totalEntries": 2,
+  "testCase": "photo-scan-success-sse",
+  "requests": [
+    {
+      "recordedAt": "2025-10-12T04:28:41.65996+00:00",
+      "request": {
+        "method": "POST",
+        "path": "/ingredicheck/preferencelists/default",
+        "query": {},
+        "bodyType": "form-data",
+        "body": {
+          "files": [],
+          "fields": {
+            "preference": "No seed oils",
+            "clientActivityId": "19457E79-86C1-417F-B0DE-12B4B5DE7DAF"
+          }
+        }
+      },
+      "response": {
+        "status": 201,
+        "bodyType": "json",
+        "body": {
+          "id": "{{var:ID_001}}",
+          "text": "No seed oils",
+          "result": "success",
+          "annotatedText": "No **seed oils**"
+        }
+      }
+    },
+    {
+      "recordedAt": "2025-10-12T04:28:58.362698+00:00",
+      "request": {
+        "method": "POST",
+        "path": "/ingredicheck/analyze-stream",
+        "query": {},
+        "bodyType": "form-data",
+        "body": {
+          "files": [],
+          "fields": {
+            "productImages": "[{\"imageOCRText\":\"bfiles\\nTab Window\\nHelp\\na Amazon.com: Triscuit Cracked Pepper & Olive Oil Whole Grain Wheat Crackers, Lunch Snacks, Snack Crackers, Family Size, 12.5 0z\\nCIref=sspa_dk_detail_2?pd_rd_i=B072WYD4SC&pd_rd_w=213y0&content-id=amzn1.sym.7b88b395-cd5a-4dc7-a145-3baffd6df512&pf_rd _p=7b88b395-..\\nJer to sanket\\nmond 98052\\noin Prime\\nAmazon Fresh\\nAmazon Haul\\nSearch Amazon\\nSame-Day Delivery\\nMedical Care\\nGroceries\\nBuy Again\\nPet Supplies\\nBrowsing History\\nBooks\\nHandmade\\nPharma\\nIMAGES\\nINGREDIENTS: WHOLE GRAIN WHEAT, CANOLA OIL, SALT, RICE\\nSTARCH, BLACK PEPPER, ONION POWDER, GARLIC POWDER,\\nEXTRA VIRGIN OLIVE OIL, NATURAL FLAVOR (CONTAINS CELERY).\\nCONTAINS: WHEAT.\\nV ShoW more\",\"imageFileHash\":\"32e77843bfd797adb35bee19f7bc3a4ae56415116c0e2b4d03ef3276581310c5\"}]",
+            "clientActivityId": "D069E347-8893-4987-B844-9E4FB8E561C0",
+            "userPreferenceText": "No seed oils"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "bodyType": "sse",
+        "body": [
+          {
+            "data": {
+              "name": "Cracked Pepper & Olive Oil Whole Grain Wheat Crackers",
+              "brand": "Triscuit",
+              "images": [
+                {
+                  "imageFileHash": "32e77843bfd797adb35bee19f7bc3a4ae56415116c0e2b4d03ef3276581310c5"
+                }
+              ],
+              "ingredients": [
+                {
+                  "name": "Whole Grain Wheat"
+                },
+                {
+                  "name": "Canola Oil"
+                },
+                {
+                  "name": "Salt"
+                },
+                {
+                  "name": "Rice Starch"
+                },
+                {
+                  "name": "Black Pepper"
+                },
+                {
+                  "name": "Onion Powder"
+                },
+                {
+                  "name": "Garlic Powder"
+                },
+                {
+                  "name": "Extra Virgin Olive Oil"
+                },
+                {
+                  "name": "Natural Flavor (Contains Celery)"
+                }
+              ]
+            },
+            "event": "product"
+          },
+          {
+            "data": [
+              {
+                "reasoning": "",
+                "preference": "No seed oils",
+                "ingredientName": "Canola Oil",
+                "safetyRecommendation": "DefinitelyUnsafe"
+              },
+              {
+                "reasoning": "",
+                "preference": "No seed oils",
+                "ingredientName": "Extra Virgin Olive Oil",
+                "safetyRecommendation": "MaybeUnsafe"
+              }
+            ],
+            "event": "analysis"
+          }
+        ]
+      }
+    }
+  ],
+  "variables": {
+    "ID_001": "1993"
+  }
+}
