@@ -235,7 +235,6 @@ async function checkDockerRunning(): Promise<void> {
 // Create local Edge Functions .env file instead of using supabase secrets command
 async function createLocalFunctionsEnv(): Promise<void> {
   const functionsEnvPath = join(scriptDir, "..", "functions", ".env");
-  const rootEnvPath = join(scriptDir, "..", "..", ".env");
   
   // Read secrets from root .env
   const secrets = [
@@ -267,6 +266,8 @@ async function createLocalFunctionsEnv(): Promise<void> {
   // Add local-only test values if needed
   envContent.push("");
   envContent.push("# Local-only test values");
+  envContent.push("SUPABASE_JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long");
+  console.log("   ✓ SUPABASE_JWT_SECRET added to local .env (generated)");
   envContent.push("LOCAL_ENV=true");
   envContent.push(`LOCAL_SUPABASE_URL=http://127.0.0.1:54321`);
   

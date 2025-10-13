@@ -1,6 +1,5 @@
 import { Application, Router, Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 import { createClient } from '@supabase/supabase-js'
-import * as KitchenSink from '../shared/kitchensink.ts'
 import * as Analyzer from './analyzer.ts'
 import * as AnalyzerV2 from './analyzerv2.ts'
 import * as Extractor from './extractor.ts'
@@ -9,6 +8,7 @@ import * as Feedback from './feedback.ts'
 import * as History from './history.ts'
 import * as Lists from './lists.ts'
 import * as PreferenceList from './preferencelist.ts'
+import { decodeUserIdFromRequest } from '../shared/auth.ts'
 
 const app = new Application()
 const supabaseServiceUrl = Deno.env.get('SUPABASE_URL') ?? ''
@@ -17,7 +17,16 @@ const supabaseServiceClient = supabaseServiceUrl && supabaseServiceRoleKey
     ? createClient(supabaseServiceUrl, supabaseServiceRoleKey)
     : null
 
-app.use((ctx, next) => {
+app.use(async (ctx, next) => {
+    try {
+        await decodeUserIdFromRequest(ctx)
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unauthorized'
+        ctx.response.status = 401
+        ctx.response.body = { error: message }
+        return
+    }
+
     ctx.state.supabaseClient = createClient(
         Deno.env.get('SUPABASE_URL') ?? '',
         Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -27,7 +36,7 @@ app.use((ctx, next) => {
         }
     )
     ctx.state.activityId = crypto.randomUUID()
-    return next()
+    await next()
 })
 
 type CapturedBody =
@@ -227,12 +236,7 @@ app.use(async (ctx, next) => {
         return next()
     }
 
-    let userId: string | null = null
-    try {
-        userId = await KitchenSink.getUserId(ctx)
-    } catch (_error) {
-        userId = null
-    }
+    const userId = typeof ctx.state.userId === 'string' ? ctx.state.userId : null
 
     if (userId !== recordingUserId) {
         return next()
@@ -292,7 +296,7 @@ router
             Deno.env.get('SUPABASE_URL') ?? '',
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
         )
-        const userId = await KitchenSink.getUserId(ctx)
+        const userId = ctx.state.userId as string
         console.log('deleting user: ', userId)
         const result = await supabaseClient.auth.admin.deleteUser(
             userId,

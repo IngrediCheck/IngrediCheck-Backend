@@ -1,10 +1,19 @@
 import { Application, Router } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 import { createClient } from '@supabase/supabase-js'
-import * as KitchenSink from '../shared/kitchensink.ts'
+import { decodeUserIdFromRequest } from '../shared/auth.ts'
 
 const app = new Application()
 
-app.use((ctx, next) => {
+app.use(async (ctx, next) => {
+    try {
+        await decodeUserIdFromRequest(ctx)
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unauthorized'
+        ctx.response.status = 401
+        ctx.response.body = { error: message }
+        return
+    }
+
     ctx.state.supabaseClient = createClient(
         Deno.env.get('SUPABASE_URL') ?? '',
         Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -14,7 +23,7 @@ app.use((ctx, next) => {
         }
     )
     ctx.state.activityId = crypto.randomUUID()
-    return next()
+    await next()
 })
 
 const router = new Router()
@@ -23,7 +32,7 @@ router
     .post('/background/log_images', async (ctx) => {
         const body = ctx.request.body({ type: 'json', limit: 0 })
         const body_json = await body.value
-        const user_id = await KitchenSink.getUserId(ctx)
+        const user_id = ctx.state.userId
         const entries = body_json.product_images.map((image: any) => {
             return {
                 user_id: user_id,
@@ -48,7 +57,7 @@ router
     .post('/background/log_inventory', async (ctx) => {
         const body = ctx.request.body({ type: 'json', limit: 0 })
         const body_json = await body.value
-        const user_id = await KitchenSink.getUserId(ctx)
+        const user_id = ctx.state.userId
         const entry = {
             ...body_json,
             user_id: user_id,
@@ -67,7 +76,7 @@ router
     .post('/background/log_llmcalls', async (ctx) => {
         const body = ctx.request.body({ type: 'json', limit: 0 })
         const body_json = await body.value
-        const user_id = await KitchenSink.getUserId(ctx)
+        const user_id = ctx.state.userId
         const entries = body_json.map((entry: any) => {
             return {
                 user_id: user_id,
@@ -91,7 +100,7 @@ router
         const result = await ctx.state.supabaseClient
             .from('log_analyzebarcode')
             .insert({
-                user_id: await KitchenSink.getUserId(ctx),
+                user_id: ctx.state.userId,
                 ...body_json
             })
         if (result.error) {
@@ -108,7 +117,7 @@ router
         const result = await ctx.state.supabaseClient
             .from('log_extract')
             .insert({
-                user_id: await KitchenSink.getUserId(ctx),
+                user_id: ctx.state.userId,
                 ...body_json
             })
         if (result.error) {

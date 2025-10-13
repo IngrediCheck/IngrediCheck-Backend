@@ -1,5 +1,4 @@
 import { Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
-import * as KitchenSink from '../shared/kitchensink.ts'
 import { preferenceValidatorAgent } from '../shared/llm/preferencevalidatoragent.ts'
 
 const MB = 1024 * 1024
@@ -29,7 +28,7 @@ export async function getItems(ctx: Context) {
 export async function grandfather(ctx: Context) {
     const body = ctx.request.body({ type: "json" })
     const requestBody = await body.value
-    const userId = await KitchenSink.getUserId(ctx)
+    const userId = ctx.state.userId
     const entries = requestBody.map((text: string) => {
         return {
             user_id: userId,
@@ -55,7 +54,7 @@ export async function addItem(ctx: Context) {
     const formData = await body.value.read({ maxSize: 10 * MB })
     const preferenceText = formData.fields['preference']
     ctx.state.clientActivityId = formData.fields['clientActivityId']
-    const userId = await KitchenSink.getUserId(ctx)
+    const userId = ctx.state.userId
 
     const validationResult = await preferenceValidatorAgent(ctx, preferenceText)
     if (validationResult.result === 'failure') {

@@ -1,5 +1,4 @@
 import { Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
-import * as KitchenSink from '../shared/kitchensink.ts'
 
 const MB = 1024 * 1024
 
@@ -19,7 +18,7 @@ export async function addListItem(ctx: Context, listId: string) {
     const body = ctx.request.body({ type: "form-data" })
     const formData = await body.value.read({ maxSize: 10 * MB })
     ctx.state.clientActivityId = formData.fields['clientActivityId']
-    const userId = await KitchenSink.getUserId(ctx)
+    const userId = ctx.state.userId
     const result = await ctx.state.supabaseClient
         .from('user_list_items')
         .insert({

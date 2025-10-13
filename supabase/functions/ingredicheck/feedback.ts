@@ -1,5 +1,4 @@
 import { Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
-import * as KitchenSink from '../shared/kitchensink.ts'
 
 declare const EdgeRuntime: {
   waitUntil(promise: Promise<any>): void;
@@ -32,7 +31,7 @@ export async function submitFeedback(ctx: Context) {
         const result = await ctx.state.supabaseClient
             .from('log_feedback')
             .upsert({
-                user_id: await KitchenSink.getUserId(ctx),
+                user_id: ctx.state.userId,
                 activity_id: ctx.state.activityId,
                 client_activity_id: clientActivityId,
                 rating: feedback.rating,
