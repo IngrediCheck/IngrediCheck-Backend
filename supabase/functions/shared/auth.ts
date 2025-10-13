@@ -1,4 +1,5 @@
 import { Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
+import { createClient } from '@supabase/supabase-js'
 
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
@@ -55,7 +56,14 @@ export async function decodeUserIdFromRequest(ctx: Context): Promise<string> {
         throw new Error('Unauthorized: No valid user found')
     }
 
-    const userId = await decodeUserIdFromJwt(token)
+    let userId: string | null = null
+
+    if (jwtSecret) {
+        userId = await decodeUserIdFromJwt(token)
+    } else {
+        userId = await fetchUserIdFromSupabase(token)
+    }
+
     if (userId && userId.length > 0) {
         ctx.state.userId = userId
         return userId
@@ -118,4 +126,24 @@ async function verifyJwt(token: string): Promise<Record<string, unknown> | null>
     }
 
     return payload
+}
+
+async function fetchUserIdFromSupabase(token: string): Promise<string | null> {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
+    const apiKey = serviceRoleKey ?? anonKey
+    if (!supabaseUrl || !apiKey) {
+        return null
+    }
+
+    const supabaseClient = createClient(supabaseUrl, apiKey, {
+        auth: { persistSession: false }
+    })
+    const { data, error } = await supabaseClient.auth.getUser(token)
+    if (error) {
+        return null
+    }
+    const userId = data.user?.id
+    return typeof userId === 'string' && userId.length > 0 ? userId : null
 }
