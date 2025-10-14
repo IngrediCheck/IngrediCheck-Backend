@@ -1569,6 +1569,35 @@ async function replayArtifact(
   return { stats, aborted };
 }
 
+async function deleteTestUser(
+  config: RuntimeConfig,
+  tokens: Tokens,
+  userId: string,
+): Promise<void> {
+  const url = new URL("ingredicheck/deleteme", config.functionsBaseUrl);
+  const headers = buildAuthHeaders(tokens);
+  
+  try {
+    const response = await fetch(url.toString(), {
+      method: "POST",
+      headers,
+    });
+    
+    if (!response.ok) {
+      console.warn(`⚠️  Failed to delete test user ${userId}: HTTP ${response.status}`);
+      return;
+    }
+    
+    console.log(`🗑️  Deleted test user: ${userId}`);
+  } catch (error) {
+    console.warn(
+      `⚠️  Failed to delete test user ${userId}: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+}
+
 async function run() {
   const selectionArg = Deno.args.length === 0 ? undefined : Deno.args.join(",");
   const config = await loadConfig();
@@ -1595,8 +1624,8 @@ async function run() {
 
     // Create a new anon account for each test case
     console.log("Creating new anonymous user account for this test case...");
-    let tokens: Tokens;
-    let userId: string;
+    let tokens: Tokens = { accessToken: "", anonKey: "", userId: "" };
+    let userId: string = "";
     try {
       const authResult = await signInAnonymously(
         config.baseUrl,
@@ -1623,6 +1652,9 @@ async function run() {
     totals.total += stats.total;
     totals.passed += stats.passed;
     totals.failed += stats.failed;
+
+    // Delete the test user
+    await deleteTestUser(config, tokens, userId);
 
     if (config.stopOnFailure && aborted) {
       console.log(
