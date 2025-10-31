@@ -1,0 +1,104 @@
+{
+  "recordingSessionId": "2025-10-31-1200-family-create-fetch",
+  "recordedUserId": "00000000-0000-4000-9000-000000000001",
+  "exportedAt": "2025-10-31T12:00:00.000Z",
+  "totalEntries": 2,
+  "testCase": "family-create-and-fetch",
+  "requests": [
+    {
+      "recordedAt": "2025-10-31T12:00:05.000Z",
+      "request": {
+        "method": "POST",
+        "path": "/ingredicheck/family",
+        "query": {},
+        "bodyType": "json",
+        "body": {
+          "name": "Taylor Household",
+          "selfMember": {
+            "id": "{{var:SELF_MEMBER_ID}}",
+            "name": "Alex Taylor",
+            "nicknames": [
+              "Lex"
+            ],
+            "info": "Primary account holder",
+            "color": "#1F77B4"
+          },
+          "otherMembers": [
+            {
+              "id": "{{var:PARTNER_MEMBER_ID}}",
+              "name": "Jamie Taylor",
+              "nicknames": [
+                "Jay"
+              ],
+              "info": "Partner",
+              "color": "#FF7F0E"
+            },
+            {
+              "id": "{{var:KID_MEMBER_ID}}",
+              "name": "Casey Taylor",
+              "nicknames": [
+                "Case"
+              ],
+              "info": "Student",
+              "color": "#2CA02C"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": null
+      }
+    },
+    {
+      "recordedAt": "2025-10-31T12:00:07.000Z",
+      "request": {
+        "method": "GET",
+        "path": "/ingredicheck/family",
+        "query": {},
+        "bodyType": "empty",
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "name": "Taylor Household",
+          "selfMember": {
+            "id": "{{var:SELF_MEMBER_ID}}",
+            "name": "Alex Taylor",
+            "nicknames": [
+              "Lex"
+            ],
+            "info": "Primary account holder",
+            "color": "#1F77B4",
+            "joined": true
+          },
+          "otherMembers": [
+            {
+              "id": "{{var:PARTNER_MEMBER_ID}}",
+              "name": "Jamie Taylor",
+              "nicknames": [
+                "Jay"
+              ],
+              "info": "Partner",
+              "color": "#FF7F0E",
+              "joined": false
+            },
+            {
+              "id": "{{var:KID_MEMBER_ID}}",
+              "name": "Casey Taylor",
+              "nicknames": [
+                "Case"
+              ],
+              "info": "Student",
+              "color": "#2CA02C",
+              "joined": false
+            }
+          ],
+          "version": "{{var:FAMILY_VERSION_INITIAL}}"
+        }
+      }
+    }
+  ]
+}
+

@@ -1,0 +1,137 @@
+{
+  "recordingSessionId": "2025-10-31-1220-family-invite-join",
+  "recordedUserId": "00000000-0000-4000-9000-000000000003",
+  "exportedAt": "2025-10-31T12:20:00.000Z",
+  "totalEntries": 5,
+  "testCase": "family-invite-join",
+  "requests": [
+    {
+      "recordedAt": "2025-10-31T12:20:05.000Z",
+      "request": {
+        "method": "POST",
+        "path": "/ingredicheck/family",
+        "query": {},
+        "bodyType": "json",
+        "body": {
+          "name": "Johnson Household",
+          "selfMember": {
+            "id": "{{var:SELF_MEMBER_ID}}",
+            "name": "Morgan Johnson",
+            "nicknames": [
+              "MJ"
+            ],
+            "info": "Owner",
+            "color": "#0D3B66"
+          },
+          "otherMembers": [
+            {
+              "id": "{{var:TEEN_MEMBER_ID}}",
+              "name": "Taylor Johnson",
+              "nicknames": [
+                "TJ"
+              ],
+              "info": "Teen",
+              "color": "#F95738"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": null
+      }
+    },
+    {
+      "recordedAt": "2025-10-31T12:20:08.000Z",
+      "request": {
+        "method": "POST",
+        "path": "/ingredicheck/family/invite",
+        "query": {},
+        "bodyType": "json",
+        "body": {
+          "memberID": "{{var:TEEN_MEMBER_ID}}"
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "inviteCode": "{{var:FAMILY_INVITE_CODE}}"
+        }
+      }
+    },
+    {
+      "recordedAt": "2025-10-31T12:20:11.000Z",
+      "request": {
+        "method": "POST",
+        "path": "/ingredicheck/family/leave",
+        "query": {},
+        "bodyType": "empty",
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "message": "Successfully left the family"
+        }
+      }
+    },
+    {
+      "recordedAt": "2025-10-31T12:20:13.000Z",
+      "request": {
+        "method": "GET",
+        "path": "/ingredicheck/family",
+        "query": {},
+        "bodyType": "empty",
+        "body": null
+      },
+      "response": {
+        "status": 400,
+        "body": {
+          "error": "User is not a member of any family"
+        }
+      }
+    },
+    {
+      "recordedAt": "2025-10-31T12:20:16.000Z",
+      "request": {
+        "method": "POST",
+        "path": "/ingredicheck/family/join",
+        "query": {},
+        "bodyType": "json",
+        "body": {
+          "inviteCode": "{{var:FAMILY_INVITE_CODE}}"
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "name": "Johnson Household",
+          "selfMember": {
+            "id": "{{var:TEEN_MEMBER_ID}}",
+            "name": "Taylor Johnson",
+            "nicknames": [
+              "TJ"
+            ],
+            "info": "Teen",
+            "color": "#F95738",
+            "joined": true
+          },
+          "otherMembers": [
+            {
+              "id": "{{var:SELF_MEMBER_ID}}",
+              "name": "Morgan Johnson",
+              "nicknames": [
+                "MJ"
+              ],
+              "info": "Owner",
+              "color": "#0D3B66",
+              "joined": false
+            }
+          ],
+          "version": "{{var:VERSION_AFTER_JOIN}}"
+        }
+      }
+    }
+  ]
+}
+
