@@ -150,6 +150,11 @@ async function runCommandWithRetry(command: string[], maxRetries: number, option
 async function loadEnvFromRoot(): Promise<void> {
   const repoRoot = join(scriptDir, "..", "..");
   const envPath = join(repoRoot, ".env");
+  const ignoredKeys = new Set([
+    "SUPABASE_BASE_URL",
+    "SUPABASE_ANON_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+  ]);
   
   try {
     const content = await Deno.readTextFile(envPath);
@@ -158,7 +163,12 @@ async function loadEnvFromRoot(): Promise<void> {
       if (!trimmed || trimmed.startsWith("#")) continue;
       const [key, ...valueParts] = trimmed.split("=");
       if (key) {
-        Deno.env.set(key.trim(), valueParts.join("=").trim());
+        const normalizedKey = key.trim();
+        if (ignoredKeys.has(normalizedKey)) {
+          console.log(`   ↷ Skipped ${normalizedKey} from root .env (managed by Supabase CLI)`);
+          continue;
+        }
+        Deno.env.set(normalizedKey, valueParts.join("=").trim());
       }
     }
     console.log(`   Loaded from ${envPath}`);
