@@ -5,11 +5,10 @@ This directory contains end-to-end regression tests for the IngrediCheck backend
 ## Prerequisites
 
 ### Required Software
-- **Docker Desktop** - For running local Supabase stack
-- **Supabase CLI** - For managing Supabase projects and functions
-- **Deno** - For running the test scripts
-- **Python 3.x** - For some dependencies and utilities
-- **IngrediCheck mobile app** - Install on your Android or iPhone device
+- **Docker Desktop** – for running the local Supabase stack
+- **Supabase CLI** – for managing Supabase projects and functions
+- **Deno** – for running the regression-test scripts
+- **Python 3.x** – required by a few helper utilities
 
 ### Environment Setup
 Copy the `.env.template` file in the repository root and add your secrets:
@@ -41,6 +40,12 @@ SUPABASE_BASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 ```
 
+## Suite Layout
+
+- `testcases/Replay`: recorded regression flows that mirror production traffic and power the default replay suite.
+
+> Looking for the new family End-To-End suite? See `testcases/EndToEnd/README.md`.
+
 ## 1. How to Capture a New Test Case
 
 1. **Run the capture script**:
@@ -54,6 +59,7 @@ SUPABASE_ANON_KEY=your-anon-key
    - Press Enter when done
 
 3. **Test case saved** as `testcases/your-test-case-name.json`
+4. Move the generated file into `testcases/Replay/` and commit it with a descriptive name.
 
 ## 2. How to Run Test Cases Against Local Supabase
 
@@ -64,10 +70,9 @@ SUPABASE_ANON_KEY=your-anon-key
 
 2. **Run test cases**:
    ```bash
-   ./run-testcase.ts all                    # All tests
-   ./run-testcase.ts 1,3,5                  # Specific tests
-   ./run-testcase.ts 1-3                    # Range of tests
-   ./run-testcase.ts barcode-scan-success   # Named test
+   ./run-testcase.ts                        # Replay suite (defaults to all)
+   ./run-testcase.ts 1,3,5                  # Specific Replay tests
+   ./run-testcase.ts 1-3                    # Range of Replay tests
    ```
 
 3. **Clean up**:
@@ -85,7 +90,8 @@ SUPABASE_ANON_KEY=your-anon-key
 
 2. **Run tests against remote**:
    ```bash
-   ./run-testcase.ts all
+   ./run-testcase.ts
+   ./run-testcase-endtoend.ts
    ```
 
 ## 4. GitHub Workflow and Production Deployment
@@ -114,11 +120,13 @@ supabase/tests/
 ├── shared/
 │   └── setup.ts                # Common utilities
 └── testcases/                  # Captured test cases
-    ├── barcode-scan-success.json
-    ├── photo-scan-success.json
-    ├── favorites-valid.json
-    ├── history-valid.json
-    └── preferences-add-edit-delete.json
+    ├── Replay/                 # Historical recordings
+    │   ├── barcode-scan-success.json
+    │   ├── photo-scan-success.json
+    │   ├── favorites-valid.json
+    │   ├── history-valid.json
+    │   └── preferences-add-edit-delete.json
+    └── EndToEnd/               # (see separate README in this folder)
 ```
 
 ## Best Practices

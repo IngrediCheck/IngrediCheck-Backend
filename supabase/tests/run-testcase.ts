@@ -205,6 +205,12 @@ if (!envLoad.loaded) {
 const PLACEHOLDER_REGEXP = /\{\{var:([A-Z0-9_:-]+)\}\}/g;
 const TESTCASES_ROOT = join(scriptDir, "testcases");
 
+type SuiteName = string;
+
+function resolveSuitePath(suite: SuiteName): string {
+  return join(TESTCASES_ROOT, suite);
+}
+
 async function prompt(question: string): Promise<string | null> {
   await Deno.stdout.write(new TextEncoder().encode(question));
   const buf = new Uint8Array(1024);
@@ -232,32 +238,39 @@ function formatTestCaseName(slug: string): string {
     .join(" ");
 }
 
-async function discoverTestCases(): Promise<TestCase[]> {
+async function discoverTestCases(suite: SuiteName): Promise<TestCase[]> {
   const cases: TestCase[] = [];
+  const suitePath = resolveSuitePath(suite);
+
   try {
-    for await (const entry of Deno.readDir(TESTCASES_ROOT)) {
+    for await (const entry of Deno.readDir(suitePath)) {
       if (!entry.isFile || !entry.name.endsWith(".json")) continue;
       const slug = entry.name.replace(/\.json$/, "");
       cases.push({
         slug,
         displayName: formatTestCaseName(slug),
-        filePath: join(TESTCASES_ROOT, entry.name),
+        filePath: join(suitePath, entry.name),
       });
     }
   } catch (error) {
-    if (!(error instanceof Deno.errors.NotFound)) {
-      throw error;
+    if (error instanceof Deno.errors.NotFound) {
+      console.error(`Error: Suite "${suite}" not found under ${TESTCASES_ROOT}.`);
+      Deno.exit(1);
     }
+    throw error;
   }
 
   cases.sort((a, b) => a.displayName.localeCompare(b.displayName));
   return cases;
 }
 
-async function promptTestCaseSelection(cases: TestCase[]): Promise<TestCase[]> {
+async function promptTestCaseSelection(
+  cases: TestCase[],
+  suite: SuiteName,
+): Promise<TestCase[]> {
   if (cases.length === 0) {
     console.error(
-      "Error: No recorded regression test cases were found under supabase/tests/testcases.",
+      `Error: No recorded regression test cases were found under suite "${suite}".`,
     );
     Deno.exit(1);
   }
@@ -268,7 +281,7 @@ async function promptTestCaseSelection(cases: TestCase[]): Promise<TestCase[]> {
   }
 
   // Display available test cases
-  console.log("\nAvailable test cases:");
+  console.log(`\nAvailable test cases in suite "${suite}":`);
   cases.forEach((testCase, index) => {
     console.log(`  ${index + 1}. ${testCase.displayName}`);
   });
@@ -485,6 +498,16 @@ function resolvePlaceholdersInString(
   );
 }
 
+function extractPlaceholdersFromString(value: string): string[] {
+  const names: string[] = [];
+  const regex = /\{\{var:([A-Z0-9_:-]+)\}\}/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(value)) !== null) {
+    names.push(match[1]);
+  }
+  return names;
+}
+
 function resolveJsonValue(
   value: unknown,
   variables: PlaceholderStore,
@@ -513,6 +536,31 @@ function resolveJsonValue(
     return result;
   }
   return value;
+}
+
+function collectPlaceholdersFromJson(
+  value: unknown,
+  callback: (name: string) => void,
+): void {
+  if (typeof value === "string") {
+    for (const name of extractPlaceholdersFromString(value)) {
+      callback(name);
+    }
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectPlaceholdersFromJson(item, callback);
+    }
+    return;
+  }
+
+  if (value && typeof value === "object") {
+    for (const child of Object.values(value as Record<string, unknown>)) {
+      collectPlaceholdersFromJson(child, callback);
+    }
+  }
 }
 
 function resolvePlaceholdersInPath(
@@ -1457,6 +1505,12 @@ async function replayArtifact(
     string,
     PlaceholderValue
   >();
+  const predefinedVariables = artifact.variables ?? {};
+
+  for (const [name, value] of Object.entries(predefinedVariables)) {
+    const textValue = String(value);
+    runtimeVariables.set(name, { raw: textValue, text: textValue });
+  }
   
   // Create UUID replacement mapping
   const replacements = scanForReplacementValues(artifact);
@@ -1480,6 +1534,7 @@ async function replayArtifact(
     }/${artifact.requests.length} ${step.request.method.toUpperCase()} ${step.request.path}`;
 
     try {
+      ensureRequestPlaceholders(step, runtimeVariables, predefinedVariables);
       const result = await replayRequest(
         step,
         config,
@@ -1598,11 +1653,76 @@ async function deleteTestUser(
   }
 }
 
-async function run() {
-  const selectionArg = Deno.args.length === 0 ? undefined : Deno.args.join(",");
+function ensureRequestPlaceholders(
+  entry: RecordedRequest,
+  variables: PlaceholderStore,
+  predefined: Record<string, string>,
+): void {
+  const ensureVariable = (name: string) => {
+    if (variables.has(name)) {
+      return;
+    }
+    if (Object.prototype.hasOwnProperty.call(predefined, name)) {
+      const value = String(predefined[name]);
+      variables.set(name, { raw: value, text: value });
+      return;
+    }
+    const generated = crypto.randomUUID();
+    variables.set(name, { raw: generated, text: generated });
+  };
+
+  const searchString = (value?: string) => {
+    if (!value) return;
+    for (const name of extractPlaceholdersFromString(value)) {
+      ensureVariable(name);
+    }
+  };
+
+  searchString(entry.request.path);
+
+  if (entry.request.query) {
+    for (const value of Object.values(entry.request.query)) {
+      searchString(value);
+    }
+  }
+
+  switch (entry.request.bodyType) {
+    case "json":
+      collectPlaceholdersFromJson(entry.request.body, ensureVariable);
+      break;
+    case "text":
+      if (typeof entry.request.body === "string") {
+        searchString(entry.request.body);
+      }
+      break;
+    case "form-data":
+      if (entry.request.body && typeof entry.request.body === "object") {
+        const body = entry.request.body as {
+          fields?: Record<string, unknown>;
+          files?: Array<Record<string, unknown>>;
+        };
+        if (body.fields) {
+          for (const value of Object.values(body.fields)) {
+            collectPlaceholdersFromJson(value, ensureVariable);
+          }
+        }
+        if (body.files) {
+          for (const file of body.files) {
+            collectPlaceholdersFromJson(file, ensureVariable);
+          }
+        }
+      }
+      break;
+    default:
+      break;
+  }
+}
+
+async function runSuite(suite: SuiteName, cliArgs: string[]): Promise<void> {
+  const selectionArg = cliArgs.length === 0 ? undefined : cliArgs.join(",");
   const config = await loadConfig();
-  const testCases = await discoverTestCases();
-  let selectedCases: TestCase[];
+  const testCases = await discoverTestCases(suite);
+  let selectedCases: TestCase[] = [];
 
   if (selectionArg !== undefined) {
     try {
@@ -1614,13 +1734,13 @@ async function run() {
       Deno.exit(1);
     }
   } else {
-    selectedCases = await promptTestCaseSelection(testCases);
+    selectedCases = await promptTestCaseSelection(testCases, suite);
   }
 
   const totals: ReplayStats = { total: 0, passed: 0, failed: 0 };
 
   for (const testCase of selectedCases) {
-    console.log(`\n=== ${testCase.displayName} ===`);
+    console.log(`\n=== [${suite}] ${testCase.displayName} ===`);
 
     // Create a new anon account for each test case
     console.log("Creating new anonymous user account for this test case...");
@@ -1680,5 +1800,7 @@ async function run() {
 }
 
 if (import.meta.main) {
-  await run();
+  await runSuite("Replay", Deno.args);
 }
+
+export { runSuite };
