@@ -403,3 +403,589 @@ END;
 $$ LANGUAGE plpgsql;
 
 --------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+-- MARK: Review System v2 (from main)
+-- Drops obsolete v1 tables/functions and adds latest threaded review schema and functions
+--------------------------------------------------------------------------------
+
+-- Drop obsolete functions (ignore if not present)
+DROP FUNCTION IF EXISTS public.llm_reviews_list(text, text, text, integer, integer) CASCADE;
+DROP FUNCTION IF EXISTS public.llm_review_create(text, text, text, integer, json, json) CASCADE;
+DROP FUNCTION IF EXISTS public.llm_review_update_status(uuid, text, text) CASCADE;
+DROP FUNCTION IF EXISTS public.llm_review_assign(uuid, uuid) CASCADE;
+DROP FUNCTION IF EXISTS public.llm_review_comment_add(uuid, text) CASCADE;
+DROP FUNCTION IF EXISTS public.reviewers_list() CASCADE;
+DROP FUNCTION IF EXISTS public.review_dashboard_stats() CASCADE;
+DROP FUNCTION IF EXISTS public.my_assigned_reviews() CASCADE;
+DROP FUNCTION IF EXISTS public.review_history(uuid) CASCADE;
+
+-- Drop obsolete tables to switch to threaded review model
+DROP TABLE IF EXISTS public.review_comments CASCADE;
+DROP TABLE IF EXISTS public.llm_reviews CASCADE;
+
+-- The review data is coming from the existing functions barcode_review_list, extract_review_list, and preferences_review_list
+-- which pull data from the log_analyzebarcode, log_extract, and log_preference_validation tables respectively.
+-- These functions format the raw log data into review-ready structures with thread IDs, product information, and review metadata.
+
+-- New threaded review tables (from main)
+CREATE TABLE IF NOT EXISTS public.review_threads (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    source_table text NOT NULL,
+    source_id uuid NOT NULL,
+    thread_type text NOT NULL,
+    status text NOT NULL DEFAULT 'unreviewed',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    created_by uuid NULL REFERENCES auth.users(id)
+);
+
+CREATE TABLE IF NOT EXISTS public.review_assignments (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    thread_id uuid NOT NULL REFERENCES public.review_threads(id) ON DELETE CASCADE,
+    reviewer_id uuid NOT NULL REFERENCES auth.users(id),
+    assigned_by uuid NULL REFERENCES auth.users(id),
+    assigned_at timestamptz NOT NULL DEFAULT now(),
+    completed_at timestamptz NULL,
+    UNIQUE(thread_id, reviewer_id)
+);
+
+CREATE TABLE IF NOT EXISTS public.review_comments (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    thread_id uuid NOT NULL REFERENCES public.review_threads(id) ON DELETE CASCADE,
+    user_id uuid NOT NULL REFERENCES auth.users(id),
+    comment text NOT NULL,
+    action text NULL,
+    metadata jsonb NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Preference validation log table
+CREATE TABLE IF NOT EXISTS public.log_preference_validation (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id uuid NULL REFERENCES auth.users(id),
+    input_text text NOT NULL,
+    output_interpretation jsonb NOT NULL,
+    latency_ms integer NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    client_activity_id uuid NULL
+);
+
+-- Helper triggers to manage updated_at
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'tr_review_threads_set_updated_at'
+  ) THEN
+    CREATE TRIGGER tr_review_threads_set_updated_at
+    BEFORE UPDATE ON public.review_threads
+    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+  END IF;
+END $$;
+
+-- MARK: LLM Review Dashboard System
+-- Tables and functions for reviewing LLM outputs in the dashboard
+
+-- User roles table for reviewer management
+CREATE TABLE public.user_roles (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    role text NOT NULL CHECK (role IN ('admin', 'reviewer')),
+    is_active boolean NOT NULL DEFAULT true,
+    created_at timestamptz DEFAULT now(),
+    UNIQUE(user_id, role)
+);
+
+ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
+
+-- RLS policies for user_roles
+CREATE POLICY "Admins can view all roles" ON public.user_roles
+    FOR SELECT USING (is_admin(auth.uid()));
+
+CREATE POLICY "Admins can manage roles" ON public.user_roles
+    FOR ALL USING (is_admin(auth.uid()));
+
+-- Main LLM reviews table
+CREATE TABLE public.llm_reviews (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    review_type text NOT NULL CHECK (review_type IN ('preference_validation', 'analyze_llm', 'extract_llm')),
+    input_text text NOT NULL,
+    output_interpretation text,
+    status text NOT NULL DEFAULT 'unreviewed' CHECK (status IN ('unreviewed', 'approved', 'rejected', 'needs_revision')),
+    latency_ms integer,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now(),
+    assigned_reviewer_id uuid REFERENCES auth.users(id),
+    reviewed_at timestamptz,
+    review_notes text,
+    product_data json,
+    image_data json,
+    user_id uuid REFERENCES auth.users(id)
+);
+
+ALTER TABLE public.llm_reviews ENABLE ROW LEVEL SECURITY;
+
+-- Review comments table
+CREATE TABLE public.review_comments (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    review_id uuid NOT NULL REFERENCES public.llm_reviews(id) ON DELETE CASCADE,
+    reviewer_id uuid NOT NULL REFERENCES auth.users(id),
+    comment text NOT NULL,
+    created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE public.review_comments ENABLE ROW LEVEL SECURITY;
+
+-- RLS policies for llm_reviews
+CREATE POLICY "Reviewers can view assigned reviews" ON public.llm_reviews
+    FOR SELECT USING (
+        assigned_reviewer_id = auth.uid() OR 
+        is_admin(auth.uid()) OR 
+        is_reviewer(auth.uid())
+    );
+
+CREATE POLICY "Authenticated users can create reviews" ON public.llm_reviews
+    FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+
+CREATE POLICY "Reviewers can update assigned reviews" ON public.llm_reviews
+    FOR UPDATE USING (
+        assigned_reviewer_id = auth.uid() OR 
+        is_admin(auth.uid())
+    );
+
+-- RLS policies for review_comments
+CREATE POLICY "Reviewers can view comments" ON public.review_comments
+    FOR SELECT USING (
+        reviewer_id = auth.uid() OR 
+        is_admin(auth.uid()) OR 
+        is_reviewer(auth.uid())
+    );
+
+CREATE POLICY "Reviewers can create comments" ON public.review_comments
+    FOR INSERT WITH CHECK (
+        reviewer_id = auth.uid() AND 
+        (is_reviewer(auth.uid()) OR is_admin(auth.uid()))
+    );
+
+-- Dashboard/review functions from main (selection)
+CREATE OR REPLACE FUNCTION public.get_user_role(user_uuid uuid)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_role TEXT;
+BEGIN
+    SELECT role INTO user_role
+    FROM user_roles
+    WHERE user_id = user_uuid;
+    RETURN COALESCE(user_role, 'none');
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.has_role(user_uuid uuid, required_role text)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN get_user_role(user_uuid) = required_role;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_available_reviewers()
+RETURNS TABLE(reviewer_id uuid, reviewer_name text, assigned_count bigint)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    IF NOT is_admin(auth.uid()) THEN
+        RAISE EXCEPTION 'Only admins can view reviewers';
+    END IF;
+    RETURN QUERY
+    SELECT 
+        ur.user_id as reviewer_id,
+        au.email as reviewer_name,
+        COUNT(ra.id) as assigned_count
+    FROM public.user_roles ur
+    JOIN auth.users au ON au.id = ur.user_id
+    LEFT JOIN public.review_assignments ra ON ra.reviewer_id = ur.user_id
+    WHERE ur.role IN ('reviewer', 'admin')
+    GROUP BY ur.user_id, au.email
+    ORDER BY assigned_count ASC, au.email;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.review_open_or_get_thread(p_source_table text, p_source_id uuid, p_thread_type text)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE v_thread_id uuid;
+BEGIN
+  SELECT id INTO v_thread_id FROM public.review_threads
+  WHERE source_table = p_source_table AND source_id = p_source_id;
+  IF v_thread_id IS NULL THEN
+    INSERT INTO public.review_threads (source_table, source_id, thread_type, created_by)
+    VALUES (p_source_table, p_source_id, p_thread_type, auth.uid())
+    RETURNING id INTO v_thread_id;
+  END IF;
+  RETURN v_thread_id;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.review_assign(p_thread_id uuid, p_reviewer_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    IF NOT is_admin(auth.uid()) THEN
+        RAISE EXCEPTION 'Only admins can assign reviewers';
+    END IF;
+    INSERT INTO public.review_assignments (thread_id, reviewer_id, assigned_by)
+    VALUES (p_thread_id, p_reviewer_id, auth.uid())
+    ON CONFLICT (thread_id, reviewer_id) DO NOTHING;
+    PERFORM review_comment_add(p_thread_id, 'Assigned to reviewer', 'assignment', jsonb_build_object('reviewer_id', p_reviewer_id));
+    RETURN TRUE;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.review_comment_add(p_thread_id uuid, p_comment text, p_action text DEFAULT 'comment', p_metadata jsonb DEFAULT NULL)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE v_comment_id uuid;
+BEGIN
+  INSERT INTO public.review_comments (thread_id, user_id, comment, action, metadata)
+  VALUES (p_thread_id, auth.uid(), p_comment, p_action, p_metadata)
+  RETURNING id INTO v_comment_id;
+  UPDATE public.review_threads SET updated_at = now() WHERE id = p_thread_id;
+  RETURN v_comment_id;
+END;
+$$;
+
+-- List helpers used by dashboard
+CREATE OR REPLACE FUNCTION public.preferences_review_list(p_limit integer DEFAULT 50, p_status text DEFAULT NULL)
+RETURNS TABLE(thread_id uuid, subject_id uuid, input_text text, output_interpretation jsonb, status text, latency_ms numeric, created_at timestamptz, reviewer_ids uuid[], comment_count bigint)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+  SELECT 
+    COALESCE(client_activity_id, id) as thread_id,
+    COALESCE(client_activity_id, id) as subject_id,
+    COALESCE(input_text, '') as input_text,
+    COALESCE(output_interpretation, '{}'::jsonb) as output_interpretation,
+    COALESCE(p_status, 'open') as status,
+    COALESCE(latency_ms, 0)::numeric as latency_ms,
+    created_at,
+    '{}'::uuid[] as reviewer_ids,
+    0::bigint as comment_count
+  FROM public.log_preference_validation
+  WHERE (p_status IS NULL OR p_status = 'all' OR 'open' = p_status)
+  ORDER BY created_at DESC
+  LIMIT p_limit;
+$$;
+
+CREATE OR REPLACE FUNCTION public.barcode_review_list(p_limit integer DEFAULT 50, p_status text DEFAULT NULL, p_offset integer DEFAULT 0)
+RETURNS TABLE(thread_id uuid, subject_id uuid, product_name text, barcode text, category text, output_interpretation jsonb, status text, latency_ms numeric, created_at timestamptz, reviewer_ids uuid[], comment_count bigint)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+BEGIN
+  RETURN QUERY
+  WITH barcode_data AS (
+    SELECT 
+      la.activity_id,
+      la.client_activity_id,
+      la.created_at,
+      la.start_time,
+      la.end_time,
+      la.request_body::jsonb as request_body,
+      la.response_body::jsonb as response_body,
+      la.response_status,
+      la.user_id,
+      li.name as inventory_name,
+      li.brand as inventory_brand,
+      li.barcode as inventory_barcode,
+      li.ingredients::jsonb as inventory_ingredients,
+      li.images::jsonb as inventory_images,
+      li.data_source,
+      (
+        SELECT jsonb_agg(jsonb_build_object('imageFileHash', img.image_file_hash, 'barcode', img.barcode_ios, 'ocrText', img.image_ocrtext_ios))
+        FROM public.log_images img WHERE img.client_activity_id = la.client_activity_id
+      ) as log_images_data,
+      (
+        SELECT jsonb_agg(jsonb_build_object('text', dp.text, 'annotated_text', dp.annotated_text))
+        FROM public.dietary_preferences dp WHERE dp.user_id = la.user_id AND dp.deleted_at IS NULL
+      ) as user_preferences
+    FROM public.log_analyzebarcode la
+    LEFT JOIN public.log_inventory li ON li.client_activity_id = la.client_activity_id
+    WHERE (p_status IS NULL OR p_status = 'all' OR 'open' = p_status)
+    ORDER BY la.created_at DESC
+    OFFSET p_offset
+    LIMIT p_limit
+  )
+  SELECT 
+    COALESCE(bd.client_activity_id, bd.activity_id) AS thread_id,
+    COALESCE(bd.client_activity_id, bd.activity_id) AS subject_id,
+    COALESCE(bd.inventory_name, CASE WHEN bd.response_status = 200 THEN bd.response_body->>'name' ELSE NULL END, bd.request_body->>'text', 'Unknown Product')::text AS product_name,
+    COALESCE(bd.inventory_barcode, CASE WHEN bd.response_status = 200 THEN bd.response_body->>'barcode' ELSE NULL END, bd.request_body->>'barcode', 'N/A')::text AS barcode,
+    COALESCE(bd.data_source, 'Analyze')::text AS category,
+    jsonb_build_object(
+      'product', jsonb_build_object(
+        'name', COALESCE(bd.inventory_name, CASE WHEN bd.response_status = 200 THEN bd.response_body->>'name' ELSE bd.request_body->>'text' END, 'Unknown Product'),
+        'brand', COALESCE(bd.inventory_brand, CASE WHEN bd.response_status = 200 THEN bd.response_body->>'brand' ELSE '' END),
+        'barcode', COALESCE(bd.inventory_barcode, CASE WHEN bd.response_status = 200 THEN bd.response_body->>'barcode' ELSE bd.request_body->>'barcode' END, ''),
+        'ingredients', COALESCE(bd.inventory_ingredients, CASE WHEN bd.response_status = 200 THEN bd.response_body->'ingredients' ELSE COALESCE(bd.request_body->'ingredients', '[]'::jsonb) END),
+        'images', COALESCE(bd.inventory_images, bd.log_images_data, CASE WHEN bd.response_status = 200 THEN bd.response_body->'images' ELSE bd.request_body->'images' END, '[]'::jsonb)
+      ),
+      'response', CASE WHEN bd.response_status = 200 THEN COALESCE(bd.response_body, '{}'::jsonb) ELSE jsonb_build_object('error', true, 'status', bd.response_status, 'message', COALESCE(bd.response_body->>'message', 'Product not found'), 'details', bd.response_body, 'request_data', bd.request_body) END,
+      'requestData', bd.request_body,
+      'matchStatus', CASE WHEN bd.inventory_name IS NOT NULL THEN 'matched' WHEN bd.response_status = 200 AND bd.response_body->>'name' IS NOT NULL THEN 'matched' ELSE 'unmatched' END,
+      'userPreferences', COALESCE(bd.user_preferences, '[]'::jsonb),
+      'violations', CASE WHEN bd.response_status = 200 THEN COALESCE(bd.response_body->'violations', '[]'::jsonb) ELSE '[]'::jsonb END,
+      'error', CASE WHEN bd.response_status != 200 THEN jsonb_build_object('status', bd.response_status, 'message', COALESCE(bd.response_body->>'message', 'Product lookup failed'), 'code', bd.response_body->>'code') ELSE NULL END
+    ) AS output_interpretation,
+    COALESCE(p_status, 'open') AS status,
+    ROUND(EXTRACT(EPOCH FROM (bd.end_time - bd.start_time)) * 1000)::numeric AS latency_ms,
+    bd.created_at,
+    ARRAY[]::uuid[] AS reviewer_ids,
+    COALESCE((SELECT COUNT(*) FROM public.review_comments rc JOIN public.review_threads rt ON rt.id = rc.thread_id WHERE rt.source_table = 'log_analyzebarcode' AND rt.source_id = bd.activity_id), 0)::bigint AS comment_count;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.extract_review_list(p_limit integer DEFAULT 50, p_status text DEFAULT NULL, p_offset integer DEFAULT 0)
+RETURNS TABLE(thread_id uuid, subject_id uuid, product_name text, barcode text, category text, output_interpretation jsonb, status text, latency_ms numeric, created_at timestamptz, reviewer_ids uuid[], comment_count bigint)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+BEGIN
+  RETURN QUERY
+  WITH extract_data AS (
+    SELECT le.activity_id, le.client_activity_id, le.created_at, le.start_time, le.end_time, le.name, le.brand, le.barcode, le.ingredients::jsonb as ingredients, le.images, le.response_status, le.user_id,
+      (SELECT jsonb_agg(jsonb_build_object('imageFileHash', img.image_file_hash, 'barcode', img.barcode_ios, 'ocrText', img.image_ocrtext_ios)) FROM public.log_images img WHERE img.client_activity_id = le.client_activity_id) as log_images_data,
+      (SELECT jsonb_agg(jsonb_build_object('text', dp.text, 'annotated_text', dp.annotated_text)) FROM public.dietary_preferences dp WHERE dp.user_id = le.user_id AND dp.deleted_at IS NULL) as user_preferences,
+      (SELECT response_body::jsonb FROM public.log_analyzebarcode la WHERE la.client_activity_id = le.client_activity_id LIMIT 1) as analyze_response
+    FROM public.log_extract le
+    WHERE (p_status IS NULL OR p_status = 'all' OR 'open' = p_status)
+    ORDER BY le.created_at DESC
+    OFFSET p_offset
+    LIMIT p_limit
+  )
+  SELECT COALESCE(ed.client_activity_id, ed.activity_id) AS thread_id,
+         COALESCE(ed.client_activity_id, ed.activity_id) AS subject_id,
+         COALESCE(ed.name, 'Unknown Product')::text AS product_name,
+         COALESCE(ed.barcode, 'N/A')::text AS barcode,
+         'Extract'::text AS category,
+         jsonb_build_object('name', ed.name, 'brand', ed.brand, 'barcode', ed.barcode, 'ingredients', COALESCE(ed.ingredients, '[]'::jsonb), 'images', COALESCE(CASE WHEN ed.images IS NOT NULL AND array_length(ed.images, 1) > 0 THEN (SELECT jsonb_agg(jsonb_build_object('imageFileHash', img_hash)) FROM unnest(ed.images) AS img_hash) ELSE NULL END, ed.log_images_data, '[]'::jsonb), 'matchStatus', CASE WHEN ed.name IS NOT NULL OR ed.brand IS NOT NULL THEN 'matched' ELSE 'unmatched' END, 'userPreferences', COALESCE(ed.user_preferences, '[]'::jsonb), 'violations', COALESCE(ed.analyze_response->'violations', '[]'::jsonb), 'analyzeResponse', COALESCE(ed.analyze_response, '{}'::jsonb), 'response_status', ed.response_status) AS output_interpretation,
+         COALESCE(p_status, 'open') AS status,
+         ROUND(EXTRACT(EPOCH FROM (ed.end_time - ed.start_time)) * 1000)::numeric AS latency_ms,
+         ed.created_at,
+         ARRAY[]::uuid[] AS reviewer_ids,
+         COALESCE((SELECT COUNT(*) FROM public.review_comments rc JOIN public.review_threads rt ON rt.id = rc.thread_id WHERE rt.source_table = 'log_extract' AND rt.source_id = ed.activity_id), 0)::bigint AS comment_count;
+END;
+$$;
+
+--------------------------------------------------------------------------------
+-- =========================================================================
+-- DASHBOARD ANALYTICS FUNCTIONS
+-- =========================================================================
+-- These functions provide aggregated data for the dashboard without modifying existing tables
+
+-- Helper function to check if user is admin
+CREATE OR REPLACE FUNCTION is_admin(user_id uuid DEFAULT auth.uid())
+RETURNS boolean AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM user_roles 
+    WHERE user_roles.user_id = user_id 
+    AND user_roles.role = 'admin' 
+    AND user_roles.is_active = true
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Helper function to check if user is reviewer
+CREATE OR REPLACE FUNCTION is_reviewer(user_id uuid DEFAULT auth.uid())
+RETURNS boolean AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM user_roles 
+    WHERE user_roles.user_id = user_id 
+    AND user_roles.role IN ('admin', 'reviewer') 
+    AND user_roles.is_active = true
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 1. Get Dashboard Totals - Total counts for main metrics
+CREATE OR REPLACE FUNCTION get_dashboard_totals()
+RETURNS TABLE (
+  total_scans bigint,
+  total_extractions bigint, 
+  total_feedback bigint,
+  total_list_items bigint,
+  total_history_items bigint
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    (SELECT COUNT(*) FROM log_analyzebarcode) as total_scans,
+    (SELECT COUNT(*) FROM log_extract) as total_extractions,
+    (SELECT COUNT(*) FROM log_feedback) as total_feedback,
+    (SELECT COUNT(*) FROM user_list_items) as total_list_items,
+    (SELECT COUNT(*) FROM log_images) as total_history_items;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 2. Get Performance Metrics - Latency and success rates
+CREATE OR REPLACE FUNCTION get_performance_metrics(days_back integer DEFAULT 30)
+RETURNS TABLE (
+  avg_latency numeric,
+  success_rate numeric,
+  total_requests bigint,
+  error_count bigint
+) AS $$
+BEGIN
+  RETURN QUERY
+  WITH performance_data AS (
+    SELECT 
+      ROUND(EXTRACT(EPOCH FROM (end_time - start_time)) * 1000) as latency_ms,
+      response_status
+    FROM log_analyzebarcode 
+    WHERE created_at > CURRENT_DATE - (days_back || ' days')::interval
+      AND start_time IS NOT NULL 
+      AND end_time IS NOT NULL
+  )
+  SELECT 
+    ROUND(AVG(latency_ms), 2) as avg_latency,
+    ROUND((COUNT(*) FILTER (WHERE response_status = 200)::numeric / COUNT(*)) * 100, 2) as success_rate,
+    COUNT(*) as total_requests,
+    COUNT(*) FILTER (WHERE response_status != 200) as error_count
+  FROM performance_data;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 3. Get Scan Activity Data - Daily activity for charts
+CREATE OR REPLACE FUNCTION get_scan_activity_data(days_back integer DEFAULT 30)
+RETURNS TABLE (
+  date date,
+  scans bigint,
+  extractions bigint,
+  success_rate numeric
+) AS $$
+BEGIN
+  RETURN QUERY
+  WITH daily_data AS (
+    SELECT 
+      DATE(created_at) as activity_date,
+      COUNT(*) FILTER (WHERE table_name = 'log_analyzebarcode') as scan_count,
+      COUNT(*) FILTER (WHERE table_name = 'log_extract') as extract_count,
+      COUNT(*) FILTER (WHERE table_name = 'log_analyzebarcode' AND response_status = 200) as success_count,
+      COUNT(*) FILTER (WHERE table_name = 'log_analyzebarcode') as total_count
+    FROM (
+      SELECT created_at, 'log_analyzebarcode' as table_name, response_status FROM log_analyzebarcode
+      UNION ALL
+      SELECT created_at, 'log_extract' as table_name, 200 as response_status FROM log_extract
+    ) combined
+    WHERE created_at > CURRENT_DATE - (days_back || ' days')::interval
+    GROUP BY DATE(created_at)
+  )
+  SELECT 
+    activity_date,
+    scan_count,
+    extract_count,
+    CASE 
+      WHEN total_count > 0 THEN ROUND((success_count::numeric / total_count) * 100, 2)
+      ELSE 0 
+    END as success_rate
+  FROM daily_data
+  ORDER BY activity_date;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 4. Get Popular Products - Most scanned products
+CREATE OR REPLACE FUNCTION get_popular_products(limit_count integer DEFAULT 10)
+RETURNS TABLE (
+  product_name text,
+  scan_count bigint,
+  category text,
+  avg_latency numeric
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    COALESCE(response_body->>'name', request_body->>'text', 'Unknown Product') as product_name,
+    COUNT(*) as scan_count,
+    COALESCE(response_body->>'category', 'Unknown') as category,
+    ROUND(AVG(EXTRACT(EPOCH FROM (end_time - start_time)) * 1000), 2) as avg_latency
+  FROM log_analyzebarcode
+  WHERE start_time IS NOT NULL AND end_time IS NOT NULL
+  GROUP BY response_body->>'name', request_body->>'text', response_body->>'category'
+  ORDER BY scan_count DESC
+  LIMIT limit_count;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 5. Get User Engagement Data - Daily active users
+CREATE OR REPLACE FUNCTION get_user_engagement_data(days_back integer DEFAULT 30)
+RETURNS TABLE (
+  date date,
+  daily_users bigint,
+  weekly_users bigint,
+  monthly_users bigint
+) AS $$
+BEGIN
+  RETURN QUERY
+  WITH user_activity AS (
+    SELECT 
+      DATE(created_at) as activity_date,
+      user_id
+    FROM (
+      SELECT created_at, user_id FROM log_analyzebarcode
+      UNION ALL
+      SELECT created_at, user_id FROM log_extract
+      UNION ALL
+      SELECT created_at, user_id FROM log_feedback
+    ) combined
+    WHERE created_at > CURRENT_DATE - (days_back || ' days')::interval
+  )
+  SELECT 
+    activity_date,
+    COUNT(DISTINCT user_id) as daily_users,
+    COUNT(DISTINCT user_id) FILTER (WHERE activity_date >= CURRENT_DATE - INTERVAL '7 days') as weekly_users,
+    COUNT(DISTINCT user_id) FILTER (WHERE activity_date >= CURRENT_DATE - INTERVAL '30 days') as monthly_users
+  FROM user_activity
+  GROUP BY activity_date
+  ORDER BY activity_date;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+--------------------------------------------------------------------------------
