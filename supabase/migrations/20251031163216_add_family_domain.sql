@@ -309,7 +309,7 @@ BEGIN
         RAISE EXCEPTION 'Target member does not exist or is already joined';
     END IF;
 
-    invite_code := encode(gen_random_bytes(8), 'hex');
+    invite_code := encode(gen_random_bytes(3), 'hex');
 
     INSERT INTO public.invite_codes (
         code,
