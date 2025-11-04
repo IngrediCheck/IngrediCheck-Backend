@@ -40,9 +40,54 @@ export function registerFamilyRoutes(router: Router) {
     return router
 }
 
+function isValidUuid(value: unknown): boolean {
+    if (typeof value !== 'string') return false
+    return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value)
+}
+
+function isValidName(value: unknown, { min = 1, max = 100 }: { min?: number; max?: number } = {}): boolean {
+    if (typeof value !== 'string') return false
+    const trimmed = value.trim()
+    return trimmed.length >= min && trimmed.length <= max
+}
+
+function validateMemberInput(member: Partial<CreateFamilyMemberPayload>): { ok: true } | { ok: false; error: string } {
+    if (!isValidUuid(member.id)) {
+        return { ok: false, error: 'Invalid member id format' }
+    }
+    if (!isValidName(member.name)) {
+        return { ok: false, error: 'Invalid member name (1-100 non-whitespace chars required)' }
+    }
+    return { ok: true }
+}
+
 async function createFamily(ctx: FamilyContext) {
     try {
         const body = await ctx.request.body({ type: 'json' }).value as CreateFamilyPayload
+
+        if (!isValidName(body.name)) {
+            ctx.response.status = 400
+            ctx.response.body = { error: 'Invalid family name (1-100 non-whitespace chars required)' }
+            return
+        }
+
+        const selfCheck = validateMemberInput(body.selfMember)
+        if (!selfCheck.ok) {
+            ctx.response.status = 400
+            ctx.response.body = { error: selfCheck.error }
+            return
+        }
+
+        if (Array.isArray(body.otherMembers)) {
+            for (const m of body.otherMembers) {
+                const check = validateMemberInput(m)
+                if (!check.ok) {
+                    ctx.response.status = 400
+                    ctx.response.body = { error: check.error }
+                    return
+                }
+            }
+        }
 
         const { error } = await ctx.state.supabaseClient.rpc('create_family', {
             family_name: body.name,
@@ -78,6 +123,12 @@ async function createInvite(ctx: FamilyContext) {
         if (!body.memberID) {
             ctx.response.status = 400
             ctx.response.body = { error: 'memberID is required' }
+            return
+        }
+
+        if (!isValidUuid(body.memberID)) {
+            ctx.response.status = 400
+            ctx.response.body = { error: 'Invalid memberID format' }
             return
         }
 
@@ -134,6 +185,13 @@ async function addMember(ctx: FamilyContext) {
     try {
         const member = await ctx.request.body({ type: 'json' }).value as MemberPayload
 
+        const check = validateMemberInput(member)
+        if (!check.ok) {
+            ctx.response.status = 400
+            ctx.response.body = { error: check.error }
+            return
+        }
+
         const { data, error } = await ctx.state.supabaseClient.rpc('add_member', {
             member_data: member
         })
@@ -157,9 +215,28 @@ async function editMember(ctx: FamilyContext) {
             return
         }
 
+        if (!isValidUuid(memberId)) {
+            ctx.response.status = 400
+            ctx.response.body = { error: 'Invalid member id format' }
+            return
+        }
+
         const member = await ctx.request.body({ type: 'json' }).value as MemberPayload
 
         const payload = { ...member, id: member.id ?? memberId }
+
+        // If body.id exists, validate it as well
+        if (member.id && !isValidUuid(member.id)) {
+            ctx.response.status = 400
+            ctx.response.body = { error: 'Invalid member id format' }
+            return
+        }
+
+        if (!isValidName(payload.name)) {
+            ctx.response.status = 400
+            ctx.response.body = { error: 'Invalid member name (1-100 non-whitespace chars required)' }
+            return
+        }
 
         const { data, error } = await ctx.state.supabaseClient.rpc('edit_member', {
             member_data: payload
@@ -181,6 +258,12 @@ async function deleteMember(ctx: FamilyContext) {
         if (!memberId) {
             ctx.response.status = 400
             ctx.response.body = { error: 'Member id is required' }
+            return
+        }
+
+        if (!isValidUuid(memberId)) {
+            ctx.response.status = 400
+            ctx.response.body = { error: 'Invalid member id format' }
             return
         }
 
