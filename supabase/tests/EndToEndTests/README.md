@@ -8,7 +8,7 @@ This directory contains deterministic fixtures that exercise the new family-mana
 - `family-invite-join.json` – owner issues an invite, leaves, second user joins with the code.
 - `family-member-lifecycle.json` – add, edit, and delete a household member.
 - `family-e2e-plan.md` – planning notes describing target scenarios.
-- `../FamilyFeatureLocalGuide.md` – longer guide with curl examples, ngrok setup, and endpoint documentation (shareable with mobile devs).
+ 
 
 ## Prerequisites
 
@@ -41,8 +41,8 @@ Output is a pass/fail report per request step. All fixtures resolve placeholders
    ./capture-testcase.ts "family-my-new-flow"
    ```
 3. Perform the actions in the mobile app or API client.
-4. When finished, press Enter; the JSON file is saved to `testcases/`.
-5. Move the new file into this `EndToEnd/` folder. Keep placeholder variables (`{{var:...}}`) consistent across requests/responses.
+4. When finished, press Enter; the JSON file is saved to `EndToEndTests/`.
+5. Move the new file into this `EndToEndTests/` folder. Keep placeholder variables (`{{var:...}}`) consistent across requests/responses.
 6. Update `family-e2e-plan.md` with the new scenario.
 
 > Tip: avoid sharing test data with sensitive information—fixtures are meant to be deterministic and safely committed.

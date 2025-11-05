@@ -42,9 +42,9 @@ SUPABASE_ANON_KEY=your-anon-key
 
 ## Suite Layout
 
-- `testcases/Replay`: recorded regression flows that mirror production traffic and power the default replay suite.
+- `ReplayTests`: recorded regression flows that mirror production traffic and power the default replay suite.
 
-> Looking for the new family End-To-End suite? See `testcases/EndToEnd/README.md`.
+> Looking for the new family End-To-End suite? See `EndToEndTests/README.md`.
 
 ## 1. How to Capture a New Test Case
 
@@ -58,8 +58,8 @@ SUPABASE_ANON_KEY=your-anon-key
    - Perform the actions you want to test
    - Press Enter when done
 
-3. **Test case saved** as `testcases/your-test-case-name.json`
-4. Move the generated file into `testcases/Replay/` and commit it with a descriptive name.
+3. **Test case saved** as `ReplayTests/your-test-case-name.json`
+4. Move the generated file into `ReplayTests/` and commit it with a descriptive name.
 
 ## 2. How to Run Test Cases Against Local Supabase
 
@@ -117,16 +117,9 @@ supabase/tests/
 ├── capture-testcase.ts         # Record new test cases
 ├── run-testcase.ts             # Replay test cases
 ├── local-env.ts                # Local Supabase management
-├── shared/
-│   └── setup.ts                # Common utilities
-└── testcases/                  # Captured test cases
-    ├── Replay/                 # Historical recordings
-    │   ├── barcode-scan-success.json
-    │   ├── photo-scan-success.json
-    │   ├── favorites-valid.json
-    │   ├── history-valid.json
-    │   └── preferences-add-edit-delete.json
-    └── EndToEnd/               # (see separate README in this folder)
+├── ReplayTests/                # Historical recordings and shared setup
+│   └── setup.ts                # Common utilities for test runners
+└── EndToEndTests/              # Deterministic family E2E fixtures (see README in this folder)
 ```
 
 ## Best Practices

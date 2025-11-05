@@ -6,7 +6,7 @@ import {
   buildAuthHeaders,
   loadEnv,
   signInAnonymously,
-} from "./shared/setup.ts";
+} from "./ReplayTests/setup.ts";
 import { loadState } from "./local-env.ts";
 
 type RecordingArtifact = {
@@ -203,7 +203,7 @@ if (!envLoad.loaded) {
 }
 
 const PLACEHOLDER_REGEXP = /\{\{var:([A-Z0-9_:-]+)\}\}/g;
-const TESTCASES_ROOT = join(scriptDir, "testcases");
+const TESTCASES_ROOT = scriptDir;
 
 type SuiteName = string;
 
@@ -1800,7 +1800,7 @@ async function runSuite(suite: SuiteName, cliArgs: string[]): Promise<void> {
 }
 
 if (import.meta.main) {
-  await runSuite("Replay", Deno.args);
+  await runSuite("ReplayTests", Deno.args);
 }
 
 export { runSuite };

@@ -5,7 +5,7 @@ import {
   createSupabaseServiceClient,
   getEnvVar,
   loadEnv,
-} from "./shared/setup.ts";
+} from "./ReplayTests/setup.ts";
 
 type RecordingRow = {
   recording_session_id: string;

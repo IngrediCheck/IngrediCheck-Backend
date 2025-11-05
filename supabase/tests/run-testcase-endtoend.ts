@@ -2,5 +2,5 @@
 
 import { runSuite } from "./run-testcase.ts";
 
-await runSuite("EndToEnd", Deno.args);
+await runSuite("EndToEndTests", Deno.args);
 

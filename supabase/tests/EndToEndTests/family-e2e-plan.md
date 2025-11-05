@@ -68,10 +68,10 @@ This document captures the concrete plan for building deterministic EndToEnd fix
 ## 4. Capture Strategy
 
 1. Prepare local Supabase via `./local-env.ts setup` (ensures service role + anon keys available for capture client).
-2. Use `./capture-testcase.ts "family-<scenario>"` and manually place the exported JSON into `testcases/EndToEnd`.
+2. Use `./capture-testcase.ts "family-<scenario>"` and manually place the exported JSON into `EndToEndTests`.
 3. Before recording, seed deterministic IDs using mobile app dev tools or scripted GraphQL where possible; otherwise, edit artifact post capture to inject placeholders.
 4. Sequence each scenario in a single uninterrupted session per test file to keep anonymous auth tokens aligned.
-5. After capture, move JSON into `supabase/tests/testcases/EndToEnd`, fill `variables` section, and verify with `./run-testcase-endtoend.ts` against the local stack.
+5. After capture, move JSON into `supabase/tests/EndToEndTests`, fill `variables` section, and verify with `./run-testcase-endtoend.ts` against the local stack.
 6. Update README regression matrix once fixtures land.
 
 ## 5. Current Fixtures
