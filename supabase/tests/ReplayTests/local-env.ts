@@ -244,7 +244,8 @@ async function checkDockerRunning(): Promise<void> {
 
 // Create local Edge Functions .env file instead of using supabase secrets command
 async function createLocalFunctionsEnv(): Promise<void> {
-  const functionsEnvPath = join(scriptDir, "..", "functions", ".env");
+  // ReplayTests lives under supabase/tests/ReplayTests → go up twice to reach supabase/functions
+  const functionsEnvPath = join(scriptDir, "..", "..", "functions", ".env");
   
   // Read secrets from root .env
   const secrets = [

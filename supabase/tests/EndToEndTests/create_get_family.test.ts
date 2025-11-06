@@ -12,6 +12,7 @@ Deno.test('create and get family', async () => {
   };
   const createResp = await fetch(`${functionsUrl(baseUrl)}/ingredicheck/family`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (createResp.status !== 201) throw new Error(`create failed ${createResp.status}`);
+  await createResp.text();
   const getResp = await fetch(`${functionsUrl(baseUrl)}/ingredicheck/family`, { headers });
   if (getResp.status !== 200) throw new Error(`get failed ${getResp.status}`);
   const json = await getResp.json();
