@@ -6,7 +6,7 @@ import {
   buildAuthHeaders,
   loadEnv,
   signInAnonymously,
-} from "./ReplayTests/setup.ts";
+} from "./setup.ts";
 import { loadState } from "./local-env.ts";
 
 type RecordingArtifact = {
@@ -1800,7 +1800,7 @@ async function runSuite(suite: SuiteName, cliArgs: string[]): Promise<void> {
 }
 
 if (import.meta.main) {
-  await runSuite("ReplayTests", Deno.args);
+  await runSuite(".", Deno.args);
 }
 
 export { runSuite };

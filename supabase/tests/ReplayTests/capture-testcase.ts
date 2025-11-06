@@ -5,7 +5,7 @@ import {
   createSupabaseServiceClient,
   getEnvVar,
   loadEnv,
-} from "./ReplayTests/setup.ts";
+} from "./setup.ts";
 
 type RecordingRow = {
   recording_session_id: string;
@@ -93,7 +93,7 @@ function resolveOptions(testCaseInput: string): Omit<CaptureOptions, 'userId'> {
   const timePart = now.toISOString().slice(11, 16).replace(":", "");
   const sessionTag = slugify(`${datePart}-${timePart}-${testCaseInput}`);
   const testCaseSlug = slugify(testCaseInput) || "adhoc";
-  const recordingsDir = join(scriptDir, "testcases");
+  const recordingsDir = scriptDir;
   const outputFile = join(recordingsDir, `${testCaseSlug}.json`);
 
   return {

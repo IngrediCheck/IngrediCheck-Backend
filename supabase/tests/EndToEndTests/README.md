@@ -1,6 +1,6 @@
-# Family End-to-End Test Suite
+# Family DB Unit Tests
 
-This directory contains deterministic fixtures that exercise the new family-management APIs. The goal is to keep these flows separate from the legacy Replay suite so mobile/backend devs can iterate quickly without noise.
+This directory contains independent Deno tests that exercise the family RPCs via the edge functions interface. These tests do not depend on `ReplayTests`.
 
 ## Files
 
@@ -12,7 +12,7 @@ This directory contains deterministic fixtures that exercise the new family-mana
 
 ## Prerequisites
 
-Run everything from `supabase/tests/`:
+Run from this folder:
 
 ```bash
 ./local-env.ts setup      # start local Supabase stack (Docker required)
@@ -26,9 +26,7 @@ During setup the script prints the local base URL (`http://127.0.0.1:54321`) and
 Use the dedicated runner so Replay flows remain isolated:
 
 ```bash
-./run-testcase-endtoend.ts             # run all family fixtures
-./run-testcase-endtoend.ts 1           # single fixture (by index)
-./run-testcase-endtoend.ts family-invite-join
+deno test -A
 ```
 
 Output is a pass/fail report per request step. All fixtures resolve placeholders such as `{{var:SELF_MEMBER_ID}}` at runtime.
@@ -41,8 +39,7 @@ Output is a pass/fail report per request step. All fixtures resolve placeholders
    ./capture-testcase.ts "family-my-new-flow"
    ```
 3. Perform the actions in the mobile app or API client.
-4. When finished, press Enter; the JSON file is saved to `EndToEndTests/`.
-5. Move the new file into this `EndToEndTests/` folder. Keep placeholder variables (`{{var:...}}`) consistent across requests/responses.
+Tests are written directly in TypeScript and make authenticated requests with an anonymous user token.
 6. Update `family-e2e-plan.md` with the new scenario.
 
 > Tip: avoid sharing test data with sensitive information—fixtures are meant to be deterministic and safely committed.
