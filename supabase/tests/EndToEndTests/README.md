@@ -1,58 +1,67 @@
-# Family DB Unit Tests
+# Family RPC End-to-End Tests
 
-This directory contains independent Deno tests that exercise the family RPCs via the edge functions interface. These tests do not depend on `ReplayTests`.
+This directory contains Deno tests that call the family RPCs through the published edge function (`/ingredicheck/family`). Each test is code-first and independent—no JSON fixtures or Replay dependencies.
 
-## Files
+## Covered Scenarios
 
-- `family-create-and-fetch.json` – creates a family and immediately fetches it.
-- `family-invite-join.json` – owner issues an invite, leaves, second user joins with the code.
-- `family-member-lifecycle.json` – add, edit, and delete a household member.
-- `family-e2e-plan.md` – planning notes describing target scenarios.
- 
+- `create_get_family.test.ts` – bootstrap a household and fetch it back.
+- `member_lifecycle.test.ts` – add, update, and remove household members.
+- `invite_join_flow.test.ts` – invite a new member, leave as owner, join with invite code.
+- `leave_family.test.ts` – ensure members can exit and lose access.
+- `validation_errors.test.ts` – guard rails for duplicate names, invalid IDs, bad invites, and self-deletion attempts.
+- `test_utils.ts` – anonymous sign-in helper and functions URL builder.
 
 ## Prerequisites
 
-Run from this folder:
+- **Deno** v1.40 or later.
+- **Supabase CLI** and **Docker Desktop** if you run against a local stack.
+- `SUPABASE_BASE_URL` and `SUPABASE_ANON_KEY` environment variables. The local stack prints these as `http://127.0.0.1:54321` and the generated anon key.
+
+## Local Environment
+
+Reuse the ReplayTests setup script so both suites share infrastructure:
 
 ```bash
-./local-env.ts setup      # start local Supabase stack (Docker required)
-./local-env.ts teardown   # stop the stack when finished
+cd ../ReplayTests
+./local-env.ts setup      # starts docker containers
+cd ../EndToEndTests
 ```
 
-During setup the script prints the local base URL (`http://127.0.0.1:54321`) and anon key. If you need to expose your machine externally (e.g., via ngrok), follow the instructions in `FamilyFeatureLocalGuide.md`.
+When you are done testing:
 
-## Running the End-to-End Suite
+```bash
+cd ../ReplayTests
+./local-env.ts teardown
+```
 
-Use the dedicated runner so Replay flows remain isolated:
+## Running Tests
+
+From this directory run:
 
 ```bash
 deno test -A
 ```
 
-Output is a pass/fail report per request step. All fixtures resolve placeholders such as `{{var:SELF_MEMBER_ID}}` at runtime.
+Useful variations:
 
-## Capturing or Updating Fixtures
+- `deno test -A --filter invite` – run a single scenario.
+- `SUPABASE_BASE_URL=... SUPABASE_ANON_KEY=... deno test -A` – target a remote project.
 
-1. Start the local stack (`./local-env.ts setup`).
-2. Record a new flow:
-   ```bash
-   ./capture-testcase.ts "family-my-new-flow"
-   ```
-3. Perform the actions in the mobile app or API client.
-Tests are written directly in TypeScript and make authenticated requests with an anonymous user token.
-6. Update `family-e2e-plan.md` with the new scenario.
+Each test signs in anonymously, issues HTTP requests against the edge function, asserts the status code, and inspects response JSON. Responses are always drained (`await resp.text()` / `await resp.json()`) to suppress Deno leak warnings.
 
-> Tip: avoid sharing test data with sensitive information—fixtures are meant to be deterministic and safely committed.
+## Adding Coverage
 
-## Auth Notes
+1. Create a new `*.test.ts` file mirroring the existing structure.
+2. Import utilities from `./test_utils.ts` to get an anon token and function URL.
+3. Keep tests deterministic—use random IDs only for isolation, and assert on returned data.
+4. Run `deno test -A` until the new file passes.
 
-- All RPCs rely on `auth.uid()`. The runner signs in anonymously for each request. If you test manually, obtain a user access token (`run-testcase-endtoend.ts` prints the anonymous user ID; check `.env-state.json` for base URL and keys).
-- Colors must be valid hex values. Member names are case-insensitive unique within a family.
+## Tips & Troubleshooting
 
-## Sharing with Mobile Developers
+- `Operation not permitted` usually means the local Supabase stack is not running.
+- After changing edge functions or SQL, redeploy or restart the stack before re-running tests.
+- If Auth rate limits complain, slow down invite/join loops or reuse tokens across assertions within a test.
+- Use `console.warn` sparingly for debugging; clean up before committing.
 
-- Point them to `FamilyFeatureLocalGuide.md` for curl samples and tunnel setup instructions.
-- Provide the anon key and either your local IP:port or tunnel URL if they need to connect to your machine.
-
-Keeping this directory self-contained ensures Replay regression coverage stays stable while the family experience evolves.
+Maintaining this suite alongside ReplayTests gives fast feedback on RPC behavior while keeping regression flows stable.
 
