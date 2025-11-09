@@ -133,6 +133,7 @@ export async function deleteItem(ctx: Context, id: number) {
             deleted_at: new Date().toISOString()
         })
         .eq('id', id)
+        .eq('user_id', ctx.state.userId)
     if (result.error) {
         console.log('supabaseClient.from(dietary_preferences).delete() failed: ', result.error)
         ctx.response.status = 500
