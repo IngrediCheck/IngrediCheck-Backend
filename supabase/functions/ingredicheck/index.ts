@@ -9,6 +9,7 @@ import * as History from './history.ts'
 import * as Lists from './lists.ts'
 import * as PreferenceList from './preferencelist.ts'
 import { decodeUserIdFromRequest } from '../shared/auth.ts'
+import { registerFamilyRoutes } from './family.ts'
 
 const app = new Application()
 const supabaseServiceUrl = Deno.env.get('SUPABASE_URL') ?? ''
@@ -289,6 +290,8 @@ app.use(async (ctx, next) => {
 })
 
 const router = new Router()
+
+registerFamilyRoutes(router)
 
 router
     .post('/ingredicheck/deleteme', async (ctx) => {
