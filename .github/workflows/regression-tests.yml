@@ -38,10 +38,10 @@ jobs:
           version: latest
 
       - name: Start local Supabase environment
-        run: deno run --allow-all supabase/tests/local-env.ts setup
+        run: deno run --allow-all supabase/tests/_shared/local-env.ts setup
 
       - name: Run regression tests
-        run: deno run --allow-all supabase/tests/run-testcase.ts all
+        run: deno run --allow-all supabase/tests/ReplayTests/run-testcase.ts all
 
       - name: Collect edge function logs on failure
         if: failure()
@@ -57,4 +57,4 @@ jobs:
 
       - name: Teardown local Supabase environment
         if: always()
-        run: deno run --allow-all supabase/tests/local-env.ts teardown
+        run: deno run --allow-all supabase/tests/_shared/local-env.ts teardown
