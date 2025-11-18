@@ -7,6 +7,8 @@ on:
       - 'supabase/functions/**'
       - 'supabase/tests/**'
       - '.github/workflows/regression-tests.yml'
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 concurrency:
