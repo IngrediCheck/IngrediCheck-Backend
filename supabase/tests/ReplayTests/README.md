@@ -53,13 +53,13 @@ SUPABASE_ANON_KEY=your-anon-key
    - Sign in as **guest** on the mobile app when requested
    - Perform the actions you wish to record
    - Press Enter in the terminal when the flow is complete
-3. The JSON fixture is saved alongside this README as `your-test-case-name.json`.
+3. The JSON fixture is saved under `./testcases/your-test-case-name.json`.
 
 ## 2. Run Test Cases Against Local Supabase
 
 1. Start the local stack:
    ```bash
-   ./local-env.ts setup
+   ../_shared/local-env.ts setup
    ```
 2. Replay tests:
    ```bash
@@ -70,14 +70,14 @@ SUPABASE_ANON_KEY=your-anon-key
    ```
 3. Shut down services when finished:
    ```bash
-   ./local-env.ts teardown
+   ../_shared/local-env.ts teardown
    ```
 
 ## 3. Run Test Cases Against Remote Supabase
 
 1. Stop any local stack:
    ```bash
-   ./local-env.ts teardown
+   ../_shared/local-env.ts teardown
    ```
 2. Replay against remote using the appropriate `SUPABASE_BASE_URL`/keys in `.env`:
    ```bash
@@ -90,25 +90,30 @@ CI runs the replay suite on every push to `main`. Deployments only proceed if al
 
 ## Troubleshooting
 
-- **Docker not running** – Launch Docker Desktop, then retry `./local-env.ts setup`.
+- **Docker not running** – Launch Docker Desktop, then retry `../_shared/local-env.ts setup`.
 - **Missing env vars** – Ensure `../../.env` is populated or export required variables in the shell.
-- **Remote failures after local runs** – Always run `./local-env.ts teardown` before switching targets.
+- **Remote failures after local runs** – Always run `../_shared/local-env.ts teardown` before switching targets.
 - **Capture script cannot detect user** – Use the guest login path in the mobile app and reset app state between runs.
 - **Debug mode** – `RUN_TESTCASE_STOP_ON_FAILURE=true ./run-testcase.ts all`.
 
 ## Directory Layout
 
 ```
-supabase/tests/ReplayTests/
-├── README.md              # This file
-├── capture-testcase.ts    # Record new flows
-├── run-testcase.ts        # Replay captured flows
-├── local-env.ts           # Start/stop local Supabase stack
-├── setup.ts               # Shared helpers for replay suite
-├── barcode-scan-success.json
-├── photo-scan-success.json
-├── favorites-valid.json
-└── …                      # Additional fixtures
+supabase/tests/
+├── _shared/
+│   ├── local-env.ts       # Start/stop local Supabase stack (shared)
+│   └── utils.ts           # Shared Supabase helpers (auth, env, clients)
+├── ReplayTests/
+│   ├── README.md            # This file
+│   ├── capture-testcase.ts  # Record new flows
+│   ├── run-testcase.ts      # Replay captured flows
+│   └── testcases/
+│       ├── barcode-scan-success.json
+│       ├── photo-scan-success.json
+│       ├── favorites-valid.json
+│       └── …                 # Additional fixtures
+└── EndToEndTests/
+    └── …                   # End-to-end test files
 ```
 
 ## Best Practices

@@ -4,12 +4,8 @@ This directory contains Deno tests that call the family RPCs through the publish
 
 ## Covered Scenarios
 
-- `create_get_family.test.ts` – bootstrap a household and fetch it back.
-- `member_lifecycle.test.ts` – add, update, and remove household members.
-- `invite_join_flow.test.ts` – invite a new member, leave as owner, join with invite code.
-- `leave_family.test.ts` – ensure members can exit and lose access.
-- `validation_errors.test.ts` – guard rails for duplicate names, invalid IDs, bad invites, and self-deletion attempts.
-- `test_utils.ts` – anonymous sign-in helper and functions URL builder.
+- `family_management.test.ts` – exercise create/get, member lifecycle, invite/join, leave, and validation/error cases in one file.
+- `../_shared/utils.ts` – shared Supabase helpers (`signInAnon`, `functionsUrl`, auth client wrappers).
 
 ## Prerequisites
 
@@ -19,10 +15,10 @@ This directory contains Deno tests that call the family RPCs through the publish
 
 ## Local Environment
 
-Reuse the ReplayTests setup script so both suites share infrastructure:
+Use the shared setup script to start the local Supabase stack:
 
 ```bash
-cd ../ReplayTests
+cd ../_shared
 ./local-env.ts setup      # starts docker containers
 cd ../EndToEndTests
 ```
@@ -30,7 +26,7 @@ cd ../EndToEndTests
 When you are done testing:
 
 ```bash
-cd ../ReplayTests
+cd ../_shared
 ./local-env.ts teardown
 ```
 
@@ -51,8 +47,8 @@ Each test signs in anonymously, issues HTTP requests against the edge function, 
 
 ## Adding Coverage
 
-1. Create a new `*.test.ts` file mirroring the existing structure.
-2. Import utilities from `./test_utils.ts` to get an anon token and function URL.
+1. Extend `family_management.test.ts` (or add a new test file beside it) and follow the established `callFamily` helper pattern.
+2. Import utilities from `../_shared/utils.ts` to get anonymous credentials and build function URLs.
 3. Keep tests deterministic—use random IDs only for isolation, and assert on returned data.
 4. Run `deno test -A` until the new file passes.
 
@@ -63,5 +59,4 @@ Each test signs in anonymously, issues HTTP requests against the edge function, 
 - If Auth rate limits complain, slow down invite/join loops or reuse tokens across assertions within a test.
 - Use `console.warn` sparingly for debugging; clean up before committing.
 
-Maintaining this suite alongside ReplayTests gives fast feedback on RPC behavior while keeping regression flows stable.
-
+This suite provides fast feedback on RPC behavior through code-first tests that exercise the family domain endpoints.

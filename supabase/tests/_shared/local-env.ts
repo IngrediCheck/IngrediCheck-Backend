@@ -148,7 +148,7 @@ async function runCommandWithRetry(command: string[], maxRetries: number, option
 
 // Load .env from repo root
 async function loadEnvFromRoot(): Promise<void> {
-  const repoRoot = join(scriptDir, "..", "..");
+  const repoRoot = join(scriptDir, "..", "..", "..");
   const envPath = join(repoRoot, ".env");
   const ignoredKeys = new Set([
     "SUPABASE_BASE_URL",
@@ -242,9 +242,9 @@ async function checkDockerRunning(): Promise<void> {
   }
 }
 
-// Create local Edge Functions .env file instead of using supabase secrets command
+// Create local Edge Functions .env file
 async function createLocalFunctionsEnv(): Promise<void> {
-  // ReplayTests lives under supabase/tests/ReplayTests → go up twice to reach supabase/functions
+  // _shared lives under supabase/tests/_shared → go up twice to reach supabase/functions
   const functionsEnvPath = join(scriptDir, "..", "..", "functions", ".env");
   
   // Read secrets from root .env
@@ -479,7 +479,7 @@ async function setupCommand(): Promise<void> {
   console.log("🚀 Setting up LOCAL Supabase environment...\n");
   
   // Safety check: Warn if project is linked
-  const projectRefPath = join(scriptDir, "..", ".temp", "project-ref");
+  const projectRefPath = join(scriptDir, "..", "..", ".temp", "project-ref");
   try {
     const projectRef = await Deno.readTextFile(projectRefPath);
     console.log("⚠️  WARNING: Project is linked to remote instance!");
@@ -494,9 +494,6 @@ async function setupCommand(): Promise<void> {
   console.log("1️⃣ Loading environment variables...");
   await loadEnvFromRoot();
 
-  console.log("1️⃣.5 Preparing edge function secrets...");
-  await createLocalFunctionsEnv();
-  
   // 2. Check if Supabase is already running
   console.log("2️⃣ Checking existing Supabase instance...");
   const existingState = await loadState();
@@ -517,6 +514,10 @@ async function setupCommand(): Promise<void> {
   // 3. Ensure Docker is running
   console.log("3️⃣ Verifying Docker is running...");
   await checkDockerRunning();
+  
+  // 3.5. Create .env file (BEFORE starting Supabase so it gets loaded)
+  console.log("3️⃣.5 Preparing edge function .env file...");
+  await createLocalFunctionsEnv();
   
   // 4. Start Supabase (pulls images, starts containers)
   console.log("4️⃣ Starting Supabase stack (this may take a few minutes)...");
@@ -669,3 +670,4 @@ if (import.meta.main) {
     Deno.exit(1);
   });
 }
+

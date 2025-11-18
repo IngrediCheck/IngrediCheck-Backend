@@ -1,6 +1,7 @@
 import { dirname, fromFileUrl, join } from "std/path";
 import { parse as parseDotenv } from "std/dotenv";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { loadState } from "./local-env.ts";
 
 type EnvLoadOptions = {
   candidates?: string[];
@@ -14,6 +15,11 @@ type EnvLoadResult = {
 
 export type AuthTokens = {
   accessToken: string;
+  anonKey: string;
+};
+
+export type SupabaseConfig = {
+  baseUrl: string;
   anonKey: string;
 };
 
@@ -82,6 +88,59 @@ export function createSupabaseServiceClient(
   return createClient(baseUrl, serviceRoleKey, {
     auth: { persistSession: false },
   });
+}
+
+export async function resolveSupabaseConfig(): Promise<SupabaseConfig> {
+  const localState = await loadState();
+  const baseUrl = localState?.baseUrl ?? getEnvVar("SUPABASE_BASE_URL") ??
+    "http://127.0.0.1:54321";
+  const anonKey = localState?.anonKey ?? getEnvVar("SUPABASE_ANON_KEY");
+
+  if (!anonKey) {
+    throw new Error(
+      "SUPABASE_ANON_KEY not set and local environment state not available",
+    );
+  }
+
+  return { baseUrl, anonKey };
+}
+
+export function functionsUrl(baseUrl: string): string {
+  return `${baseUrl.replace(/\/$/, "")}/functions/v1`;
+}
+
+export async function signInAnon(
+  options: { baseUrl?: string; anonKey?: string } = {},
+): Promise<{ accessToken: string; baseUrl: string }> {
+  const config = await resolveSupabaseConfig();
+  const baseUrl = options.baseUrl ?? config.baseUrl;
+  const anonKey = options.anonKey ?? config.anonKey;
+  const authUrl = `${baseUrl.replace(/\/$/, "")}/auth/v1/signup`;
+  const resp = await fetch(authUrl, {
+    method: "POST",
+    headers: {
+      "apikey": anonKey,
+      "Authorization": `Bearer ${anonKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email: `anon-${crypto.randomUUID()}@test.local`,
+      password: crypto.randomUUID(),
+    }),
+  });
+
+  if (!resp.ok) {
+    const errorText = await resp.text();
+    throw new Error(`auth failed ${resp.status}: ${errorText}`);
+  }
+
+  const json = await resp.json();
+  const accessToken = json?.access_token ?? json?.accessToken;
+  if (!accessToken) {
+    throw new Error("missing access token");
+  }
+
+  return { accessToken, baseUrl };
 }
 
 export async function signInAnonymously(
