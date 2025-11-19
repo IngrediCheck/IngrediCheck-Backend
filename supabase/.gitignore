@@ -3,4 +3,6 @@
 .temp
 .env
 
+functions/.env
+
 supabase/functions/.env

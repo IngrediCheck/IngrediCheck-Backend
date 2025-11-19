@@ -89,7 +89,7 @@ USING (public.is_family_member(families.id));
 
 CREATE POLICY select_members ON public.members
 FOR SELECT TO authenticated
-USING (user_id = auth.uid());
+USING (public.is_family_member(family_id));
 
 CREATE POLICY insert_family_member ON public.members
 FOR INSERT

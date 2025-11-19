@@ -128,6 +128,53 @@ Deno.test("family management: create and retrieve household", async () => {
   assertEquals(data?.selfMember?.joined, true);
 });
 
+Deno.test("family management: get_family returns otherMembers", async () => {
+  const { accessToken, baseUrl } = await signInAnon();
+  const otherMemberId = crypto.randomUUID();
+  const otherMemberName = "Test Other Member";
+  const otherMemberColor = "#FF5733";
+
+  await callFamily({
+    accessToken,
+    baseUrl,
+    path: "/ingredicheck/family",
+    method: "POST",
+    body: {
+      name: "Test Family",
+      selfMember: {
+        id: crypto.randomUUID(),
+        name: "Self",
+        color: "#000000",
+      },
+      otherMembers: [{
+        id: otherMemberId,
+        name: otherMemberName,
+        color: otherMemberColor,
+      }],
+    },
+    expectStatus: 201,
+  });
+
+  const { data } = await callFamily<{
+    otherMembers?: Array<{ id?: string; name?: string; color?: string; joined?: boolean }>;
+  }>({
+    accessToken,
+    baseUrl,
+    path: "/ingredicheck/family",
+    expectStatus: 200,
+    parseJson: true,
+  });
+
+  // This assertion would fail with the old RLS policy that only allowed
+  // users to see members where user_id = auth.uid()
+  assertNotEquals(data?.otherMembers?.length, 0, "otherMembers should not be empty");
+  assertEquals(data?.otherMembers?.length, 1, "should have exactly one otherMember");
+  assertEquals(data?.otherMembers?.[0]?.id, otherMemberId, "otherMember ID should match");
+  assertEquals(data?.otherMembers?.[0]?.name, otherMemberName, "otherMember name should match");
+  assertEquals(data?.otherMembers?.[0]?.color, otherMemberColor, "otherMember color should match");
+  assertEquals(data?.otherMembers?.[0]?.joined, false, "unassociated member should have joined=false");
+});
+
 Deno.test("family management: member lifecycle CRUD", async () => {
   const { accessToken, baseUrl } = await signInAnon();
   const selfId = crypto.randomUUID();
