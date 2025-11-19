@@ -5,7 +5,7 @@ import {
   createSupabaseServiceClient,
   getEnvVar,
   loadEnv,
-} from "./shared/setup.ts";
+} from "../_shared/utils.ts";
 
 type RecordingRow = {
   recording_session_id: string;
@@ -87,13 +87,20 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-function resolveOptions(testCaseInput: string): Omit<CaptureOptions, 'userId'> {
+function resolveOptions(testCaseInput: string): Omit<CaptureOptions, "userId"> {
   const now = new Date();
   const datePart = now.toISOString().slice(0, 10);
   const timePart = now.toISOString().slice(11, 16).replace(":", "");
   const sessionTag = slugify(`${datePart}-${timePart}-${testCaseInput}`);
   const testCaseSlug = slugify(testCaseInput) || "adhoc";
   const recordingsDir = join(scriptDir, "testcases");
+  try {
+    Deno.mkdirSync(recordingsDir, { recursive: true });
+  } catch (error) {
+    if (!(error instanceof Deno.errors.AlreadyExists)) {
+      throw error;
+    }
+  }
   const outputFile = join(recordingsDir, `${testCaseSlug}.json`);
 
   return {
@@ -194,14 +201,14 @@ async function queryNewUsers(
   sinceTimestamp: string,
 ): Promise<AuthUser[]> {
   const { data, error } = await client.auth.admin.listUsers();
-  
+
   if (error) {
     console.error("Failed to query auth.users:", error);
     Deno.exit(1);
   }
-  
+
   const sinceDate = new Date(sinceTimestamp);
-  return data.users.filter(user => {
+  return data.users.filter((user) => {
     const userCreatedAt = new Date(user.created_at);
     return userCreatedAt > sinceDate;
   });
@@ -209,25 +216,31 @@ async function queryNewUsers(
 
 async function detectUserFromGuestSignIn(): Promise<string> {
   const client = getSupabaseClient();
-  
+
   while (true) {
     const timestamp = new Date().toISOString();
     console.log("\n=== Guest Sign-In Detection ===");
-    console.log("Please perform a GUEST SIGN-IN on your device now, then press Enter...");
+    console.log(
+      "Please perform a GUEST SIGN-IN on your device now, then press Enter...",
+    );
     await prompt("Press Enter after completing guest sign-in...");
-    
+
     const newUsers = await queryNewUsers(client, timestamp);
-    
+
     if (newUsers.length === 0) {
       console.error("Error: No new users found after sign-in attempt.");
-      console.error("Please ensure you performed a guest sign-in and try again.");
+      console.error(
+        "Please ensure you performed a guest sign-in and try again.",
+      );
       Deno.exit(1);
     } else if (newUsers.length === 1) {
       const userId = newUsers[0].id;
       console.log(`✓ Successfully detected user ID: ${userId}`);
       return userId;
     } else {
-      console.warn(`Warning: Multiple sign-ins detected (${newUsers.length} users).`);
+      console.warn(
+        `Warning: Multiple sign-ins detected (${newUsers.length} users).`,
+      );
       console.log("Please RESET APP STATE on your device and press Enter...");
       await prompt("Press Enter after resetting app state...");
       // Continue the loop with a fresh timestamp
@@ -358,7 +371,12 @@ function injectVariablePlaceholders(artifact: RecordingArtifact) {
 
   for (const entry of artifact.requests) {
     collectIds(entry.request.body, idMap, counter);
-    collectIdsFromResponse(entry.response.bodyType, entry.response.body, idMap, counter);
+    collectIdsFromResponse(
+      entry.response.bodyType,
+      entry.response.body,
+      idMap,
+      counter,
+    );
   }
 
   if (idMap.size === 0) {
@@ -517,19 +535,19 @@ async function writeArtifact(
 
 async function main() {
   // Get test case name from command line arguments
-  const testCaseInput = Deno.args.join(" ").trim() || 
+  const testCaseInput = Deno.args.join(" ").trim() ||
     promptValue("Name the test case being recorded");
-  
+
   // Detect user ID automatically
   const userId = await detectUserFromGuestSignIn();
-  
+
   // Resolve other options
   const baseOptions = resolveOptions(testCaseInput);
   const options: CaptureOptions = {
     ...baseOptions,
     userId,
   };
-  
+
   await setSecrets(options);
 
   console.log("\nRecording started.");

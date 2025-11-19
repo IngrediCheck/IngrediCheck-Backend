@@ -7,6 +7,8 @@ on:
       - 'supabase/functions/**'
       - 'supabase/tests/**'
       - '.github/workflows/regression-tests.yml'
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 concurrency:
@@ -17,8 +19,8 @@ jobs:
   regression:
     name: Run Supabase Regression Suite
     runs-on: ubuntu-latest
+    environment: Regression
     timeout-minutes: 45
-    environment: PROD
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -38,10 +40,13 @@ jobs:
           version: latest
 
       - name: Start local Supabase environment
-        run: deno run --allow-all supabase/tests/local-env.ts setup
+        run: deno run --allow-all supabase/tests/_shared/local-env.ts setup
+
+      - name: Run family end-to-end tests
+        run: deno test -A supabase/tests/EndToEndTests
 
       - name: Run regression tests
-        run: deno run --allow-all supabase/tests/run-testcase.ts all
+        run: deno run --allow-all supabase/tests/ReplayTests/run-testcase.ts all
 
       - name: Collect edge function logs on failure
         if: failure()
@@ -57,4 +62,4 @@ jobs:
 
       - name: Teardown local Supabase environment
         if: always()
-        run: deno run --allow-all supabase/tests/local-env.ts teardown
+        run: deno run --allow-all supabase/tests/_shared/local-env.ts teardown

@@ -19,7 +19,7 @@ This document defines how we will detect regressions in IngrediCheck’s Supabas
 - **Test workspace**: Place all regression tooling under `supabase/tests/` so scripts, fixtures, and test cases travel with the edge functions they exercise.
 - **Environment bootstrap script**: Implement `supabase/tests/setup-local-env.ts` that starts the Supabase CLI stack, launches required edge functions, waits for readiness, and tears everything down when invoked locally.
 - **Regression runner script**: Implement `supabase/tests/run-testcase.ts` that consumes recording artifacts and replays them against a supplied backend base URL (local or remote), emitting concise pass/fail output while authenticating with `signInAnonymously`, resolving `{{var:...}}` placeholders, and interactively selecting a test case (or all cases) from `supabase/tests/testcases/`.
-- **Shared utilities**: Collect common helpers in `supabase/tests/shared/setup.ts` (Supabase client creation, auth token retrieval, request execution) to avoid duplication between capture and replay scripts.
+- **Shared utilities**: Collect common helpers in `supabase/tests/_shared/utils.ts` (Supabase client creation, auth token retrieval, request execution) to avoid duplication between capture and replay scripts.
 - **Session replay**: For each recorded session, send the HTTP request as captured, then compare the response to the stored expectation. Use tolerance rules for inherently variable fields (timestamps, UUIDs) but avoid direct DB manipulation.
 - **Cleanup**: Do not modify or delete database rows during tests. Rely on the replayed responses for validation.
 
@@ -60,7 +60,7 @@ Position recordings around representative user journeys. Because validation is r
 
 2. Regression testing automation  
    - [x] (2.1) Build the regression runner in `supabase/tests/run-testcase.ts`, allowing the backend base URL to be provided (local or remote).  
-   - [ ] (2.2) Share reusable helpers in `supabase/tests/shared/setup.ts` (Supabase client creation, auth, header assembly).  
+  - [ ] (2.2) Share reusable helpers in `supabase/tests/_shared/utils.ts` (Supabase client creation, auth, header assembly).  
    - [ ] (2.3) Add a `deno task test:regression` entry that invokes the runner script.  
    - [ ] (2.4) Configure GitHub Actions workflow to execute regression tests with Docker-enabled Supabase CLI.  
    - [ ] (2.5) Implement `supabase/tests/setup-local-env.ts` to bootstrap and tear down the local Supabase stack when needed.  
