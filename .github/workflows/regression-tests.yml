@@ -19,6 +19,7 @@ jobs:
   regression:
     name: Run Supabase Regression Suite
     runs-on: ubuntu-latest
+    environment: Regression
     timeout-minutes: 45
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
