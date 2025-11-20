@@ -6,7 +6,9 @@ on:
     paths:
       - 'supabase/functions/**'
       - 'supabase/tests/**'
-      - '.github/workflows/regression-tests.yml'
+      - 'supabase/migrations/**'
+      - 'supabase/schemas/**'
+      - '.github/workflows/**'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
