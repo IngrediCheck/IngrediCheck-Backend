@@ -8,6 +8,7 @@ type DeviceRegisterPayload = {
     platform?: string
     osVersion?: string
     appVersion?: string
+    markInternal?: boolean
 }
 
 type ParamContext = Context & { params?: Record<string, string> }
@@ -119,7 +120,7 @@ export async function registerDevice(ctx: Context, serviceClient: SupabaseClient
         return
     }
 
-    const { deviceId, platform, osVersion, appVersion } = payload
+    const { deviceId, platform, osVersion, appVersion, markInternal } = payload
     if (!isValidUuid(deviceId)) {
         respondWithError(ctx, 400, 'deviceId must be a UUID string')
         return
@@ -152,6 +153,21 @@ export async function registerDevice(ctx: Context, serviceClient: SupabaseClient
             }
             deviceIsInternal = true
         } else if (!userIsInternal && deviceIsInternal) {
+            await markUserAsInternal(serviceClient, userId)
+            ctx.state.__deviceUserInternalCache?.set(userId, true)
+            userIsInternal = true
+        }
+
+        const shouldForceInternal = markInternal === true
+        if (shouldForceInternal && !deviceIsInternal) {
+            const userIds = await markDeviceInternalInternal(serviceClient, deviceId)
+            for (const id of userIds) {
+                await markUserAsInternal(serviceClient, id)
+                ctx.state.__deviceUserInternalCache?.set(id, true)
+            }
+            deviceIsInternal = true
+        }
+        if (shouldForceInternal && !userIsInternal) {
             await markUserAsInternal(serviceClient, userId)
             ctx.state.__deviceUserInternalCache?.set(userId, true)
             userIsInternal = true

@@ -222,3 +222,43 @@ Deno.test({
     assertEquals(statusResponse.is_internal, false);
   },
 });
+
+Deno.test({
+  name: "device tracking: register with markInternal promotes immediately",
+  sanitizeResources: false,
+  sanitizeOps: false,
+  async fn() {
+    const config = await resolveSupabaseConfig();
+    const baseUrl = config.baseUrl;
+    const anonKey = config.anonKey;
+    const functionsBase = functionsUrl(baseUrl);
+    const serviceClient = createSupabaseServiceClient({ baseUrl });
+
+    const testerAccount = await signInAnonymously(baseUrl, anonKey);
+    const deviceId = crypto.randomUUID();
+
+    const registerResponse = await callDevicesEndpoint<DeviceRegisterResponse>(
+      testerAccount.tokens,
+      functionsBase,
+      "/ingredicheck/devices/register",
+      {
+        method: "POST",
+        body: { deviceId, markInternal: true },
+      },
+    );
+
+    assertEquals(registerResponse.is_internal, true);
+
+    const statusResponse = await callDevicesEndpoint<DeviceStatusResponse>(
+      testerAccount.tokens,
+      functionsBase,
+      `/ingredicheck/devices/${deviceId}/is-internal`,
+    );
+    assertEquals(statusResponse.is_internal, true);
+
+    assertEquals(
+      await getUserIsInternal(serviceClient, testerAccount.userId),
+      true,
+    );
+  },
+});
