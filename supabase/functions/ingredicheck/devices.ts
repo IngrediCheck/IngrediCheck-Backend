@@ -259,6 +259,12 @@ export async function getDeviceInternalStatus(ctx: Context, serviceClient: Supab
         return
     }
 
+    const userId = ctx.state.userId
+    if (typeof userId !== 'string' || userId.length === 0) {
+        respondWithError(ctx, 401, 'Unauthorized')
+        return
+    }
+
     const params = (ctx as ParamContext).params ?? {}
     const deviceId = params.deviceId
     if (!isValidUuid(deviceId)) {
@@ -267,6 +273,26 @@ export async function getDeviceInternalStatus(ctx: Context, serviceClient: Supab
     }
 
     try {
+        const exists = await ensureDeviceExists(serviceClient, deviceId)
+        if (!exists) {
+            respondWithError(ctx, 404, 'Device not registered')
+            return
+        }
+
+        const { data: ownership, error: ownershipError } = await serviceClient
+            .from('device_user_logins')
+            .select('device_id')
+            .eq('device_id', deviceId)
+            .eq('user_id', userId)
+            .maybeSingle()
+        if (ownershipError) {
+            throw new Error(`Failed to verify device ownership: ${ownershipError.message}`)
+        }
+        if (!ownership) {
+            respondWithError(ctx, 403, 'Device does not belong to the authenticated user')
+            return
+        }
+
         const { data, error } = await serviceClient.rpc('device_is_internal', { _device_id: deviceId })
         if (error) {
             throw new Error(`device_is_internal failed: ${error.message}`)

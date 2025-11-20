@@ -23,9 +23,9 @@ app.use(async (ctx, next) => {
     try {
         await decodeUserIdFromRequest(ctx)
     } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unauthorized'
+        const detail = error instanceof Error ? error.message : 'Unauthorized'
         ctx.response.status = 401
-        ctx.response.body = { error: message }
+        ctx.response.body = { error: 'Unauthorized', detail }
         return
     }
 

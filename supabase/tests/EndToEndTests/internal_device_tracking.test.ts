@@ -7,6 +7,7 @@ import {
   signInAnonymously,
 } from "../_shared/utils.ts";
 import {
+  assert,
   assertArrayIncludes,
   assertEquals,
 } from "https://deno.land/std@0.224.0/testing/asserts.ts";
@@ -220,6 +221,79 @@ Deno.test({
       `/ingredicheck/devices/${deviceId}/is-internal`,
     );
     assertEquals(statusResponse.is_internal, false);
+  },
+});
+
+Deno.test({
+  name: "device tracking: device status requires auth and ownership",
+  sanitizeResources: false,
+  sanitizeOps: false,
+  async fn() {
+    const config = await resolveSupabaseConfig();
+    const baseUrl = config.baseUrl;
+    const anonKey = config.anonKey;
+    const functionsBase = functionsUrl(baseUrl);
+
+    const ownerAccount = await signInAnonymously(baseUrl, anonKey);
+    const intruderAccount = await signInAnonymously(baseUrl, anonKey);
+    const deviceId = crypto.randomUUID();
+
+    // Owner registers the device.
+    await callDevicesEndpoint<DeviceRegisterResponse>(
+      ownerAccount.tokens,
+      functionsBase,
+      "/ingredicheck/devices/register",
+      {
+        method: "POST",
+        body: { deviceId },
+      },
+    );
+
+    // Unauthenticated request should be rejected.
+    const unauthHeaders = new Headers({
+      "apikey": anonKey,
+      "Accept": "application/json",
+    });
+    const unauthResp = await fetch(
+      `${functionsBase}/ingredicheck/devices/${deviceId}/is-internal`,
+      { headers: unauthHeaders },
+    );
+    const unauthText = await unauthResp.text();
+    const unauthParsed = unauthText.length > 0 ? JSON.parse(unauthText) : undefined;
+    assertEquals(unauthResp.status, 401);
+    const errorPayload = unauthParsed as Record<string, unknown> | undefined;
+    const unauthorizedMessage = typeof errorPayload?.error === "string"
+      ? errorPayload.error
+      : typeof errorPayload?.msg === "string"
+      ? errorPayload.msg
+      : undefined;
+    assert(
+      unauthorizedMessage === "Unauthorized" ||
+        unauthorizedMessage === "Error: Missing authorization header",
+      `Unexpected unauthorized response message: ${
+        unauthorizedMessage ?? "undefined"
+      }`,
+    );
+
+    // Authenticated user without ownership should get 403.
+    const unauthorizedHeaders = buildAuthHeaders(
+      intruderAccount.tokens,
+      undefined,
+      { acceptJson: true },
+    );
+    const unauthorizedResp = await fetch(
+      `${functionsBase}/ingredicheck/devices/${deviceId}/is-internal`,
+      { headers: unauthorizedHeaders },
+    );
+    const unauthorizedText = await unauthorizedResp.text();
+    const unauthorizedParsed = unauthorizedText.length > 0
+      ? JSON.parse(unauthorizedText)
+      : undefined;
+    assertEquals(unauthorizedResp.status, 403);
+    assertEquals(
+      (unauthorizedParsed as Record<string, unknown>)?.error,
+      "Device does not belong to the authenticated user",
+    );
   },
 });
 
