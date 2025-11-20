@@ -53,7 +53,7 @@ export async function decodeUserIdFromRequest(ctx: Context): Promise<string> {
 
     const token = parseAuthorizationHeader(ctx)
     if (!token) {
-        throw new Error('Unauthorized: No valid user found')
+        throw new Error('Missing authorization header')
     }
 
     let userId: string | null = null
