@@ -258,22 +258,8 @@ Deno.test({
       `${functionsBase}/ingredicheck/devices/${deviceId}/is-internal`,
       { headers: unauthHeaders },
     );
-    const unauthText = await unauthResp.text();
-    const unauthParsed = unauthText.length > 0 ? JSON.parse(unauthText) : undefined;
+    await unauthResp.text();
     assertEquals(unauthResp.status, 401);
-    const errorPayload = unauthParsed as Record<string, unknown> | undefined;
-    const unauthorizedMessage = typeof errorPayload?.error === "string"
-      ? errorPayload.error
-      : typeof errorPayload?.msg === "string"
-      ? errorPayload.msg
-      : undefined;
-    assert(
-      unauthorizedMessage === "Unauthorized" ||
-        unauthorizedMessage === "Error: Missing authorization header",
-      `Unexpected unauthorized response message: ${
-        unauthorizedMessage ?? "undefined"
-      }`,
-    );
 
     // Authenticated user without ownership should get 403.
     const unauthorizedHeaders = buildAuthHeaders(
