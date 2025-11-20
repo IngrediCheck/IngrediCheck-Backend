@@ -17,7 +17,7 @@ EXECUTE FUNCTION public.update_updated_at_column();
 
 CREATE TABLE public.device_user_logins (
     device_id uuid NOT NULL REFERENCES public.devices(device_id) ON DELETE CASCADE,
-    user_id uuid NOT NULL,
+    user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     first_seen_at timestamptz NOT NULL DEFAULT now(),
     last_seen_at timestamptz NOT NULL DEFAULT now(),
     last_platform text,
