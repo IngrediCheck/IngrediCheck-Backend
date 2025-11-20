@@ -1,7 +1,7 @@
 import { dirname, fromFileUrl, join } from "std/path";
 import { parse as parseDotenv } from "std/dotenv";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { loadState } from "./local-env.ts";
+import { loadState, loadStateSync } from "./local-env.ts";
 
 type EnvLoadOptions = {
   candidates?: string[];
@@ -82,9 +82,18 @@ export function requireEnvVar(name: string, message?: string): string {
 export function createSupabaseServiceClient(
   options: { baseUrl?: string; serviceRoleKey?: string } = {},
 ): SupabaseClient {
-  const baseUrl = options.baseUrl ?? requireEnvVar("SUPABASE_BASE_URL");
+  const state = loadStateSync();
+  const baseUrl = options.baseUrl ?? getEnvVar("SUPABASE_BASE_URL") ??
+    state?.baseUrl ?? "http://127.0.0.1:54321";
   const serviceRoleKey = options.serviceRoleKey ??
-    requireEnvVar("SUPABASE_SERVICE_ROLE_KEY");
+    getEnvVar("SUPABASE_SERVICE_ROLE_KEY") ?? state?.serviceRoleKey;
+
+  if (!serviceRoleKey) {
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY not set; run supabase/tests/_shared/local-env.ts setup",
+    );
+  }
+
   return createClient(baseUrl, serviceRoleKey, {
     auth: { persistSession: false },
   });

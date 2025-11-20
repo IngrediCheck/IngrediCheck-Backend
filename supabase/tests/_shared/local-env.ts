@@ -88,6 +88,15 @@ async function loadState(): Promise<EnvState | null> {
   }
 }
 
+function loadStateSync(): EnvState | null {
+  try {
+    const content = Deno.readTextFileSync(STATE_FILE);
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+
 async function clearState(): Promise<void> {
   try {
     await Deno.remove(STATE_FILE);
@@ -97,7 +106,7 @@ async function clearState(): Promise<void> {
 }
 
 // Export for use by run-testcase.ts
-export { loadState, teardownCommand, type EnvState };
+export { loadState, loadStateSync, teardownCommand, type EnvState };
 
 // Helper functions
 function delay(ms: number): Promise<void> {
@@ -526,6 +535,14 @@ async function setupCommand(): Promise<void> {
   // 4.5. Wait for Supabase to be fully ready
   console.log("4️⃣.5 Waiting for Supabase to be fully ready...");
   await delay(10000); // Wait 10 seconds for all services to start
+
+  // 5. Apply latest declarative schema locally
+  console.log("5️⃣ Applying database schema (supabase db reset)...");
+  await runCommand(["supabase", "db", "reset", "--local", "--no-seed", "--yes"]);
+
+  // 5.5 Allow services to settle after reset
+  console.log("5️⃣.5 Waiting for database reset to finish...");
+  await delay(5000);
   
   // 6. Get connection details
   console.log("6️⃣ Retrieving connection details...");
@@ -670,4 +687,3 @@ if (import.meta.main) {
     Deno.exit(1);
   });
 }
-
