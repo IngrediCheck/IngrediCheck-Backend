@@ -46,6 +46,13 @@ jobs:
         env:
           SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
           
+      - name: Apply database migrations
+        run: |
+          echo "Applying database migrations..."
+          supabase db push
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+
       - name: Deploy IngrediCheck function
         run: |
           echo "Deploying ingredicheck function..."
