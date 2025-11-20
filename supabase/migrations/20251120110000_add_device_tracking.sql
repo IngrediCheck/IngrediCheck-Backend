@@ -133,6 +133,9 @@ AS $$
     ), false);
 $$;
 
+REVOKE ALL ON FUNCTION public.device_register(uuid, uuid, text, text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.device_set_internal(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.device_is_internal(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.device_register(uuid, uuid, text, text, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.device_set_internal(uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.device_is_internal(uuid) TO service_role;
@@ -167,5 +170,7 @@ AS $$
     ), false);
 $$;
 
+REVOKE ALL ON FUNCTION public.user_set_internal(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.user_is_internal(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.user_set_internal(uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.user_is_internal(uuid) TO service_role;
