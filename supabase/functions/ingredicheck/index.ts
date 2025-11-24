@@ -303,6 +303,9 @@ const router = new Router()
 registerFamilyRoutes(router)
 
 router
+    .get('/ingredicheck/ping', (ctx) => {
+        ctx.response.status = 204
+    })
     .post('/ingredicheck/devices/register', async (ctx) => {
         await Devices.registerDevice(ctx, supabaseServiceClient)
     })

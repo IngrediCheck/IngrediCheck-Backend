@@ -113,8 +113,28 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function runCommand(command: string[], options: { cwd?: string } = {}): Promise<void> {
+async function runCommand(command: string[], options: { cwd?: string, inherit?: boolean } = {}): Promise<void> {
   console.log(`$ ${command.join(" ")}`);
+  
+  // For long-running commands like 'supabase start', inherit stdout/stderr
+  // to avoid buffer overflow and allow real-time output
+  if (options.inherit) {
+    const proc = new Deno.Command(command[0], {
+      args: command.slice(1),
+      cwd: options.cwd ?? Deno.cwd(),
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    
+    const { code } = await proc.output();
+    
+    if (code !== 0) {
+      throw new Error(`Command failed with exit code ${code}`);
+    }
+    return;
+  }
+  
+  // Default behavior: pipe output for commands that need output captured
   const proc = new Deno.Command(command[0], {
     args: command.slice(1),
     cwd: options.cwd ?? Deno.cwd(),
@@ -135,7 +155,7 @@ async function runCommand(command: string[], options: { cwd?: string } = {}): Pr
   }
 }
 
-async function runCommandWithRetry(command: string[], maxRetries: number, options: { cwd?: string } = {}): Promise<void> {
+async function runCommandWithRetry(command: string[], maxRetries: number, options: { cwd?: string, inherit?: boolean } = {}): Promise<void> {
   let lastError: Error | null = null;
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -530,7 +550,7 @@ async function setupCommand(): Promise<void> {
   
   // 4. Start Supabase (pulls images, starts containers)
   console.log("4️⃣ Starting Supabase stack (this may take a few minutes)...");
-  await runCommand(["supabase", "start"]);
+  await runCommand(["supabase", "start"], { inherit: true });
   
   // 4.5. Wait for Supabase to be fully ready
   console.log("4️⃣.5 Waiting for Supabase to be fully ready...");
