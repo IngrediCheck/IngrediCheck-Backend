@@ -303,6 +303,21 @@ const router = new Router()
 registerFamilyRoutes(router)
 
 router
+    .get('/ingredicheck/ping', async (ctx) => {
+        const cf = (ctx.request as any).cf ?? {}
+        
+        const payload = {
+            status: 'ok',
+            dc: cf.colo ?? null,
+            country: cf.country ?? null,
+            city: cf.city ?? null,
+            region: cf.region ?? null,
+            timezone: cf.timezone ?? null
+        }
+        
+        ctx.response.status = 200
+        ctx.response.body = payload
+    })
     .post('/ingredicheck/devices/register', async (ctx) => {
         await Devices.registerDevice(ctx, supabaseServiceClient)
     })
