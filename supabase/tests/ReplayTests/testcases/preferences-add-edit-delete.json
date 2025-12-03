@@ -40,7 +40,7 @@
         "body": {
           "files": [],
           "fields": {
-            "preference": "I can’t have milk or milk products",
+            "preference": "I can’t have milk",
             "clientActivityId": "D96863B2-B498-41F0-BCF0-EA037023E3B7"
           }
         }
@@ -49,9 +49,9 @@
         "status": 201,
         "body": {
           "id": "{{var:ID_002}}",
-          "text": "I can’t have milk or milk products",
+          "text": "I can’t have milk",
           "result": "success",
-          "annotatedText": "I can’t have **milk** or **milk products**"
+          "annotatedText": "I can’t have **milk**"
         }
       }
     },
