@@ -97,9 +97,8 @@ Deno.test("family management: create and retrieve household", async () => {
     selfMember: {
       id: crypto.randomUUID(),
       name: "Morgan Shaw",
-      nicknames: ["Mo"],
-      info: "Account owner",
       color: "#264653",
+      imageFileHash: "",
     },
     otherMembers: [{
       id: crypto.randomUUID(),
@@ -133,6 +132,7 @@ Deno.test("family management: get_family returns otherMembers", async () => {
   const otherMemberId = crypto.randomUUID();
   const otherMemberName = "Test Other Member";
   const otherMemberColor = "#FF5733";
+  const otherMemberImageHash = "hash-123";
 
   await callFamily({
     accessToken,
@@ -150,13 +150,14 @@ Deno.test("family management: get_family returns otherMembers", async () => {
         id: otherMemberId,
         name: otherMemberName,
         color: otherMemberColor,
+        imageFileHash: otherMemberImageHash,
       }],
     },
     expectStatus: 201,
   });
 
   const { data } = await callFamily<{
-    otherMembers?: Array<{ id?: string; name?: string; color?: string; joined?: boolean }>;
+    otherMembers?: Array<{ id?: string; name?: string; color?: string; joined?: boolean; imageFileHash?: string }>;
   }>({
     accessToken,
     baseUrl,
@@ -172,6 +173,7 @@ Deno.test("family management: get_family returns otherMembers", async () => {
   assertEquals(data?.otherMembers?.[0]?.id, otherMemberId, "otherMember ID should match");
   assertEquals(data?.otherMembers?.[0]?.name, otherMemberName, "otherMember name should match");
   assertEquals(data?.otherMembers?.[0]?.color, otherMemberColor, "otherMember color should match");
+  assertEquals(data?.otherMembers?.[0]?.imageFileHash, otherMemberImageHash, "otherMember imageFileHash should match");
   assertEquals(data?.otherMembers?.[0]?.joined, false, "unassociated member should have joined=false");
 });
 
