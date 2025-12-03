@@ -5,9 +5,8 @@ type FamilyContext = RouterContext<string>
 interface CreateFamilyMemberPayload {
     id: string
     name: string
-    nicknames?: string[]
-    info?: string
     color: string
+    imageFileHash?: string
 }
 
 interface CreateFamilyPayload {
@@ -57,6 +56,9 @@ function validateMemberInput(member: Partial<CreateFamilyMemberPayload>): { ok: 
     }
     if (!isValidName(member.name)) {
         return { ok: false, error: 'Invalid member name (1-100 non-whitespace chars required)' }
+    }
+    if (member.imageFileHash !== undefined && typeof member.imageFileHash !== 'string') {
+        return { ok: false, error: 'imageFileHash must be a string when provided' }
     }
     return { ok: true }
 }
