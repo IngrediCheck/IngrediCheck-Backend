@@ -8,6 +8,7 @@ import * as Feedback from './feedback.ts'
 import * as History from './history.ts'
 import * as Lists from './lists.ts'
 import * as PreferenceList from './preferencelist.ts'
+import { registerMemojiRoutes } from './memoji.ts'
 import { decodeUserIdFromRequest } from '../shared/auth.ts'
 import { registerFamilyRoutes } from './family.ts'
 import * as Devices from './devices.ts'
@@ -301,6 +302,7 @@ app.use(async (ctx, next) => {
 const router = new Router()
 
 registerFamilyRoutes(router)
+registerMemojiRoutes(router, supabaseServiceClient)
 
 router
     .get('/ingredicheck/ping', (ctx) => {
