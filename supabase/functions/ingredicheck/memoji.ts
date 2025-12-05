@@ -1,6 +1,5 @@
 import { Router, RouterContext } from "oak";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import OpenAI from "openai";
 
 type MemojiContext = RouterContext<string>;
 
@@ -9,15 +8,6 @@ const rateLimitStore = new Map<string, RateRecord>();
 const RATE_LIMIT_WINDOW = 60_000; // 1 minute
 const RATE_LIMIT_MAX_REQUESTS = 10;
 const RATE_LIMIT_BURST = 5;
-
-const MONTHLY_CREDIT_LIMITS: Record<string, number> = {
-  free: 2,
-  monthly_basic: 100,
-  monthly_standard: 300,
-  monthly_pro: 1000,
-  monthly: 100,
-  lifetime: 10_000_000,
-};
 
 function getSupabaseServiceClient(): SupabaseClient {
   const url = Deno.env.get("SUPABASE_URL") ?? "";
@@ -29,32 +19,6 @@ function getSupabaseServiceClient(): SupabaseClient {
     throw new Error("Supabase env not configured");
   }
   return createClient(url, key, { auth: { persistSession: false } });
-}
-
-async function hmacSha256Hex(secret: string, message: string): Promise<string> {
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(message));
-  return Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  const aBuf = new TextEncoder().encode(a);
-  const bBuf = new TextEncoder().encode(b);
-  if (aBuf.length !== bBuf.length) return false;
-  let diff = 0;
-  for (let i = 0; i < aBuf.length; i++) {
-    diff |= aBuf[i] ^ bBuf[i];
-  }
-  return diff === 0;
 }
 
 function checkRateLimit(ip: string) {
@@ -80,7 +44,7 @@ function checkRateLimit(ip: string) {
   return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - record.count };
 }
 
-function normalizeConfig(body: Record<string, unknown>) {
+export function normalizeConfig(body: Record<string, unknown>) {
   return {
     model: (body.model as string) ?? "gpt-image-1",
     size: (body.size as string) ?? "1024x1024",
@@ -96,7 +60,7 @@ function normalizeConfig(body: Record<string, unknown>) {
   };
 }
 
-async function generatePromptHash(config: ReturnType<typeof normalizeConfig>): Promise<string> {
+export async function generatePromptHash(config: ReturnType<typeof normalizeConfig>): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(JSON.stringify(config));
   const digest = await crypto.subtle.digest("SHA-256", data);
@@ -105,49 +69,62 @@ async function generatePromptHash(config: ReturnType<typeof normalizeConfig>): P
     .join("");
 }
 
-async function getUserCredits(
+async function getOrInitAvatarUsage(
   client: SupabaseClient,
   userId: string,
-  tier: string,
-): Promise<{ credits_remaining: number; tier: string; current_month: string }> {
+): Promise<{ avatar_generation_count: number; updated_at: string }> {
   const currentMonth = new Date().toISOString().slice(0, 7);
   const { data, error } = await client
-    .from("memoji_user_credits")
-    .select("*")
+    .from("users")
+    .select("avatar_generation_count, updated_at")
     .eq("user_id", userId)
     .single();
   if (error && error.code !== "PGRST116") throw error;
-  if (!data || data.current_month !== currentMonth || data.tier !== tier) {
-    const creditsRemaining = MONTHLY_CREDIT_LIMITS[tier] ?? MONTHLY_CREDIT_LIMITS["monthly_basic"];
-    const { data: upserted, error: upsertErr } = await client
-      .from("memoji_user_credits")
-      .upsert({
-        user_id: userId,
-        current_month: currentMonth,
-        credits_remaining: creditsRemaining,
-        tier,
-      }, { onConflict: "user_id" })
-      .select()
+
+  if (!data) {
+    const { data: inserted, error: insertErr } = await client
+      .from("users")
+      .upsert(
+        {
+          user_id: userId,
+          avatar_generation_count: 0,
+        },
+        { onConflict: "user_id" },
+      )
+      .select("avatar_generation_count, updated_at")
       .single();
-    if (upsertErr) throw upsertErr;
-    return upserted;
+    if (insertErr) throw insertErr;
+    return inserted;
   }
+
+  const lastUpdatedMonth =
+    typeof data.updated_at === "string"
+      ? data.updated_at.slice(0, 7)
+      : new Date(data.updated_at as string).toISOString().slice(0, 7);
+
+  if (lastUpdatedMonth !== currentMonth) {
+    const { data: reset, error: resetErr } = await client
+      .from("users")
+      .update({ avatar_generation_count: 0 })
+      .eq("user_id", userId)
+      .select("avatar_generation_count, updated_at")
+      .single();
+    if (resetErr) throw resetErr;
+    return reset;
+  }
+
   return data;
 }
 
-async function debitCredit(client: SupabaseClient, userId: string, tier: string): Promise<number> {
-  const current = await getUserCredits(client, userId, tier);
-  if (current.credits_remaining <= 0) return -1;
-  const { data, error } = await client
-    .from("memoji_user_credits")
+async function recordAvatarGeneration(client: SupabaseClient, userId: string): Promise<void> {
+  const usage = await getOrInitAvatarUsage(client, userId);
+  const { error } = await client
+    .from("users")
     .update({
-      credits_remaining: current.credits_remaining - 1,
+      avatar_generation_count: usage.avatar_generation_count + 1,
     })
-    .eq("user_id", userId)
-    .select()
-    .single();
+    .eq("user_id", userId);
   if (error) throw error;
-  return data.credits_remaining;
 }
 
 async function checkCache(client: SupabaseClient, promptHash: string) {
@@ -166,13 +143,30 @@ async function incrementCacheUsage(client: SupabaseClient, promptHash: string) {
 }
 
 async function uploadToStorage(client: SupabaseClient, base64: string, promptHash: string) {
+  // Ensure bucket exists (idempotent)
+  const bucketName = "memoji-images";
+  try {
+    const { error: bucketErr } = await client.storage.createBucket(bucketName, {
+      public: true,
+    });
+    const bucketStatus = (bucketErr as { statusCode?: string } | null)?.statusCode;
+    const bucketMessage = (bucketErr as { message?: string } | null)?.message;
+    if (bucketErr && bucketStatus !== "409" && bucketMessage !== "The resource already exists") {
+      throw bucketErr;
+    }
+  } catch (e) {
+    // If bucket already exists, continue; otherwise surface the error
+    if (!(e as { statusCode?: string; message?: string })?.message?.includes("exists")) {
+      throw e;
+    }
+  }
+
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const path = `${year}/${month}/${promptHash}.png`;
-  const buffer = Uint8Array.from(atob(base64.replace(/^data:image\\/\\w+;base64,/, "")), (c) =>
-    c.charCodeAt(0)
-  );
+  const cleaned = base64.replace(/^data:image\/\w+;base64,/, "");
+  const buffer = Uint8Array.from(atob(cleaned), (c) => c.charCodeAt(0));
   const { error } = await client.storage
     .from("memoji-images")
     .upload(path, buffer, { contentType: "image/png", upsert: true });
@@ -199,7 +193,7 @@ async function storeInCache(
   if (error) throw error;
 }
 
-function validateRequest(body: Record<string, unknown>): { ok: true } | { ok: false; message: string } {
+export function validateRequest(body: Record<string, unknown>): { ok: true } | { ok: false; message: string } {
   const prompt = body.prompt as string | undefined;
   const hasCompact = body.familyType || body.gesture || body.hair || body.skinTone || body.accessories || body.colorTheme;
   if ((!prompt || typeof prompt !== "string") && !hasCompact) {
@@ -220,11 +214,47 @@ function validateRequest(body: Record<string, unknown>): { ok: true } | { ok: fa
   return { ok: true };
 }
 
+export function buildPromptFromOptions(body: Record<string, unknown>): string {
+  const familyType = (body.familyType as string) ?? "father";
+  const gesture = ((body.gesture as string) ?? "wave").replace(/_/g, "-");
+  const hair = (body.hair as string) ?? "short";
+  const skinTone = (body.skinTone as string) ?? "medium";
+  const accessories = Array.isArray(body.accessories) && (body.accessories as string[]).length
+    ? `wearing ${(body.accessories as string[])[0]}`
+    : "";
+  const clothing = (body.colorTheme as string) === "warm-pink"
+    ? "soft pastel sweater"
+    : "casual pastel shirt";
+  const bg = (body.background === "transparent" || body.colorTheme === "transparent")
+    ? ""
+    : "Pastel circular background.";
+  return `A premium 3D Memoji-style avatar of a ${familyType} with ${hair} and ${skinTone} skin tone. Include head, shoulders, and hands with a ${gesture} gesture. ${clothing}. ${accessories}. ${bg} Soft rounded shapes, glossy textures, minimal modern style. Cheerful happy face with warm eyes.`.trim();
+}
+
+export function buildGenerationParams(
+  selectedModel: string,
+  prompt: string,
+  config: ReturnType<typeof normalizeConfig>,
+): Record<string, unknown> {
+  const generationParams: Record<string, unknown> = {
+    model: selectedModel,
+    prompt,
+    n: 1,
+  };
+  if (selectedModel === "gpt-image-1") {
+    generationParams.size = config.size;
+    generationParams.background = config.background;
+    generationParams.output_format = "png";
+  } else {
+    generationParams.size = config.size;
+  }
+  return generationParams;
+}
+
 export function registerMemojiRoutes(router: Router, serviceClient: SupabaseClient | null) {
   router.post("/ingredicheck/memoji", async (ctx: MemojiContext) => {
     const clientIP = ctx.request.headers.get("x-forwarded-for") ??
       ctx.request.ip ??
-      ctx.request.conn.remoteAddr?.hostname ??
       "unknown";
 
     const rate = checkRateLimit(clientIP ?? "unknown");
@@ -234,27 +264,14 @@ export function registerMemojiRoutes(router: Router, serviceClient: SupabaseClie
       return;
     }
 
-    const secret = Deno.env.get("BACKEND_SECRET") ?? "";
-    if (!secret) {
-      ctx.response.status = 500;
-      ctx.response.body = { error: { message: "Server secret missing." } };
-      return;
-    }
-
     const body = await ctx.request.body({ type: "json" }).value.catch(() => ({} as Record<string, unknown>));
-    const timestamp = ctx.request.headers.get("x-timestamp") ?? "";
-    const signature = ctx.request.headers.get("x-signature") ?? "";
-    const rawBody = JSON.stringify(body ?? {});
-    const expectedSig = timestamp ? await hmacSha256Hex(secret, `${timestamp}.${rawBody}`) : "";
-    const isAuth =
-      timestamp &&
-      signature &&
-      Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp)) <= 300 &&
-      timingSafeEqual(signature, expectedSig);
-    if (!isAuth) {
-      ctx.response.status = 401;
-      ctx.response.body = { error: { message: "Unauthorized" } };
-      return;
+
+    if (!body.prompt) {
+      try {
+        body.prompt = buildPromptFromOptions(body);
+      } catch (_err) {
+        // fall through to validation error
+      }
     }
 
     const validation = validateRequest(body);
@@ -272,25 +289,11 @@ export function registerMemojiRoutes(router: Router, serviceClient: SupabaseClie
       return;
     }
 
-    const tier = (body.subscriptionTier as string) ?? "free";
-
-    // Credit enforcement
+    // Usage tracking (best effort; does not block generation)
     try {
-      const remainingAfterDebit = await debitCredit(supabase, userId, tier);
-      if (remainingAfterDebit < 0) {
-        ctx.response.status = 402;
-        ctx.response.body = {
-          error: { code: "OUT_OF_CREDITS", message: "You are out of credits." },
-          remaining: 0,
-        };
-        return;
-      }
-      ctx.response.headers.set("X-Credits-Remaining", String(remainingAfterDebit));
+      await recordAvatarGeneration(supabase, userId);
     } catch (e) {
-      console.error("Credit enforcement error", e);
-      ctx.response.status = 500;
-      ctx.response.body = { error: { message: "Credit system error." } };
-      return;
+      console.warn("Usage tracking skipped", e);
     }
 
     const config = normalizeConfig(body);
@@ -307,7 +310,6 @@ export function registerMemojiRoutes(router: Router, serviceClient: SupabaseClie
           imageUrl: cached.image_url,
           cached: true,
           cacheId: cached.id,
-          creditsConsumed: true,
         };
         return;
       }
@@ -315,41 +317,44 @@ export function registerMemojiRoutes(router: Router, serviceClient: SupabaseClie
       console.warn("Cache lookup failed, continuing to generation", err);
     }
 
+    const testMode = Deno.env.get("MEMOJI_TEST_MODE") === "true";
     const openaiKey = Deno.env.get("OPENAI_API_KEY");
-    if (!openaiKey) {
-      ctx.response.status = 500;
-      ctx.response.body = { error: { message: "OPENAI_API_KEY missing." } };
-      return;
-    }
 
     try {
-      const openai = new OpenAI({ apiKey: openaiKey });
-      const selectedModel = (body.model as string) ?? "gpt-image-1";
-      const generationParams: Record<string, unknown> = {
-        model: selectedModel,
-        prompt: (body.prompt as string) ?? "",
-        n: 1,
-      };
-      if (selectedModel === "gpt-image-1") {
-        generationParams.size = config.size;
-        generationParams.background = config.background;
-        generationParams.output_format = "png";
+      let imageUrl: string;
+
+      if (testMode) {
+        // In test mode, skip OpenAI and storage; return a deterministic stub URL.
+        imageUrl = `test://memoji/${promptHash}.png`;
       } else {
-        generationParams.size = config.size;
-      }
+        if (!openaiKey) {
+          ctx.response.status = 500;
+          ctx.response.body = { error: { message: "OPENAI_API_KEY missing." } };
+          return;
+        }
 
-      const image = await openai.images.generate(generationParams as any);
-      const b64 = image.data?.[0]?.b64_json;
-      if (!b64 || typeof b64 !== "string") {
-        throw new Error("Image generation failed: empty response");
-      }
+        const { default: OpenAI } = await import("openai");
+        const openai = new OpenAI({ apiKey: openaiKey });
+      const selectedModel = (body.model as string) ?? "gpt-image-1";
+      const generationParams = buildGenerationParams(
+        selectedModel,
+        (body.prompt as string) ?? "",
+        config,
+      );
 
-      const imageUrl = await uploadToStorage(supabase, b64, promptHash);
+        const image = await openai.images.generate(generationParams as any);
+        const b64 = image.data?.[0]?.b64_json;
+        if (!b64 || typeof b64 !== "string") {
+          throw new Error("Image generation failed: empty response");
+        }
 
-      try {
-        await storeInCache(supabase, promptHash, imageUrl, config);
-      } catch (cacheErr) {
-        console.error("Failed to store cache", cacheErr);
+        imageUrl = await uploadToStorage(supabase, b64, promptHash);
+
+        try {
+          await storeInCache(supabase, promptHash, imageUrl, config);
+        } catch (cacheErr) {
+          console.error("Failed to store cache", cacheErr);
+        }
       }
 
       ctx.response.headers.set("X-RateLimit-Limit", String(RATE_LIMIT_MAX_REQUESTS));
@@ -368,5 +373,14 @@ export function registerMemojiRoutes(router: Router, serviceClient: SupabaseClie
     }
   });
 }
+
+// Test helpers (exported for offline/unit tests)
+export const testExports = {
+  normalizeConfig,
+  generatePromptHash,
+  validateRequest,
+  buildPromptFromOptions,
+  buildGenerationParams,
+};
 
 

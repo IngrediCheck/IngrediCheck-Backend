@@ -25,21 +25,18 @@ create trigger tr_memoji_cache_set_updated_at
 before update on public.memoji_cache
 for each row execute function update_updated_at_column();
 
-create table if not exists public.memoji_user_credits (
-    user_id uuid primary key,
-    tier text not null default 'free',
-    current_month text not null,
-    credits_remaining integer not null,
+create table if not exists public.users (
+    user_id uuid primary key references auth.users (id) on delete cascade,
+    avatar_generation_count integer not null default 0,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
 );
 
-alter table public.memoji_user_credits enable row level security;
-create policy memoji_credits_self_select on public.memoji_user_credits for select to authenticated using (auth.uid() = user_id);
-create policy memoji_credits_service_all on public.memoji_user_credits for all to public using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
+alter table public.users enable row level security;
+create policy users_service_all on public.users for all to public using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
 
-create trigger tr_memoji_user_credits_set_updated_at
-before update on public.memoji_user_credits
+create trigger tr_users_set_updated_at
+before update on public.users
 for each row execute function update_updated_at_column();
 
 create table if not exists public.memoji_jobs (

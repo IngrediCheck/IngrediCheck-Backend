@@ -37,31 +37,23 @@ FOR SELECT
 TO authenticated
 USING (true);
 
--- Per-user monthly credits for memoji generation.
-CREATE TABLE IF NOT EXISTS public.memoji_user_credits (
-    user_id uuid PRIMARY KEY,
-    tier text NOT NULL DEFAULT 'free',
-    current_month text NOT NULL,
-    credits_remaining integer NOT NULL,
+-- Per-user memoji avatar generation usage.
+CREATE TABLE IF NOT EXISTS public.users (
+    user_id uuid PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
+    avatar_generation_count integer NOT NULL DEFAULT 0,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TRIGGER tr_memoji_user_credits_set_updated_at
-BEFORE UPDATE ON public.memoji_user_credits
+CREATE TRIGGER tr_users_set_updated_at
+BEFORE UPDATE ON public.users
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
 
-ALTER TABLE public.memoji_user_credits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
--- Users can view their own credits.
-CREATE POLICY memoji_credits_self_select ON public.memoji_user_credits
-FOR SELECT
-TO authenticated
-USING (auth.uid() = user_id);
-
--- Service role can manage credits.
-CREATE POLICY memoji_credits_service_all ON public.memoji_user_credits
+-- Service role can manage usage tracking.
+CREATE POLICY users_service_all ON public.users
 FOR ALL
 USING (auth.role() = 'service_role')
 WITH CHECK (auth.role() = 'service_role');
