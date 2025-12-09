@@ -27,39 +27,17 @@ for each row execute function update_updated_at_column();
 
 create table if not exists public.users (
     user_id uuid primary key references auth.users (id) on delete cascade,
-    avatar_generation_count integer not null default 0,
+    memoji_generation_count integer not null default 0,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
 );
 
 alter table public.users enable row level security;
 create policy users_service_all on public.users for all to public using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
+create policy users_select_own on public.users for select to authenticated using (auth.uid() = user_id);
 
 create trigger tr_users_set_updated_at
 before update on public.users
-for each row execute function update_updated_at_column();
-
-create table if not exists public.memoji_jobs (
-    id uuid primary key default gen_random_uuid(),
-    user_id uuid not null,
-    prompt jsonb not null,
-    status text not null default 'pending',
-    failure_reason text,
-    image_url text,
-    prompt_hash text,
-    created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now()
-);
-
-create index if not exists idx_memoji_jobs_user_id on public.memoji_jobs(user_id);
-create index if not exists idx_memoji_jobs_status on public.memoji_jobs(status);
-
-alter table public.memoji_jobs enable row level security;
-create policy memoji_jobs_self on public.memoji_jobs for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy memoji_jobs_service_all on public.memoji_jobs for all to public using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
-
-create trigger tr_memoji_jobs_set_updated_at
-before update on public.memoji_jobs
 for each row execute function update_updated_at_column();
 
 set check_function_bodies = off;
@@ -79,4 +57,19 @@ BEGIN
       AND archived = false;
 END;
 $$;
+
+-- Storage bucket RLS policies for memoji-images
+-- Note: Bucket must be created first (done in edge function or manually)
+-- These policies allow authenticated users to read memoji images
+create policy "Authenticated users can read memoji images"
+on storage.objects for select
+to authenticated
+using (bucket_id = 'memoji-images');
+
+-- Service role can manage all objects in memoji-images bucket
+create policy "Service role can manage memoji images"
+on storage.objects for all
+to service_role
+using (bucket_id = 'memoji-images')
+with check (bucket_id = 'memoji-images');
 
