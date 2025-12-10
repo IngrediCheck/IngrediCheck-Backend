@@ -2690,6 +2690,10 @@ CREATE POLICY "Admins can manage all comments" ON "public"."review_comments" USI
 
 
 
+CREATE POLICY "Admins can manage all expected outputs" ON "public"."review_expected_outputs" USING ("public"."is_admin"("auth"."uid"()));
+
+
+
 CREATE POLICY "Admins can update waitlist entries" ON "public"."waitlist" FOR UPDATE USING ("public"."is_admin"("auth"."uid"()));
 
 
@@ -2751,6 +2755,14 @@ CREATE POLICY "Reviewers can view any thread" ON "public"."review_threads" FOR S
 
 
 CREATE POLICY "Reviewers can view comments on any thread" ON "public"."review_comments" FOR SELECT USING (("public"."is_reviewer"("auth"."uid"()) OR "public"."is_admin"("auth"."uid"())));
+
+
+
+CREATE POLICY "Reviewers can view expected outputs on any thread" ON "public"."review_expected_outputs" FOR SELECT USING (("public"."is_reviewer"("auth"."uid"()) OR "public"."is_admin"("auth"."uid"())));
+
+
+
+CREATE POLICY "Reviewers can add expected outputs to any thread" ON "public"."review_expected_outputs" FOR INSERT WITH CHECK ("public"."is_reviewer"("auth"."uid"()));
 
 
 
@@ -2846,6 +2858,9 @@ ALTER TABLE "public"."review_comments" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."review_threads" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."review_expected_outputs" ENABLE ROW LEVEL SECURITY;
 
 
 CREATE POLICY "reviewers_can_select_all_log_analyzebarcode" ON "public"."log_analyzebarcode" FOR SELECT USING ("public"."is_reviewer"("auth"."uid"()));
