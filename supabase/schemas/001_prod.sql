@@ -1170,7 +1170,8 @@ BEGIN
         LEFT JOIN public.log_feedback lf
             ON la.client_activity_id = lf.client_activity_id
         WHERE
-            la.created_at > '2024-03-15'::date
+            la.user_id = auth.uid()
+            AND la.created_at > '2024-03-15'::date
             AND
             (
                 li.client_activity_id IS NOT NULL
@@ -2594,6 +2595,28 @@ CREATE INDEX "recorded_sessions_session_idx" ON "public"."recorded_sessions" USI
 
 
 CREATE INDEX "review_expected_outputs_thread_id_idx" ON "public"."review_expected_outputs" USING "btree" ("thread_id", "created_at" DESC);
+
+
+
+-- Performance indexes for scan history (get_check_history function)
+-- Fix for timeout issue: https://github.com/IngrediCheck/IngrediCheck-Backend/issues/XX
+CREATE INDEX "idx_log_analyzebarcode_user_created" ON "public"."log_analyzebarcode" USING "btree" ("user_id", "created_at" DESC);
+
+
+
+CREATE INDEX "idx_log_analyzebarcode_client_activity" ON "public"."log_analyzebarcode" USING "btree" ("client_activity_id") WHERE ("client_activity_id" IS NOT NULL);
+
+
+
+CREATE INDEX "idx_log_inventory_client_activity" ON "public"."log_inventory" USING "btree" ("client_activity_id");
+
+
+
+CREATE INDEX "idx_log_extract_client_activity" ON "public"."log_extract" USING "btree" ("client_activity_id");
+
+
+
+CREATE INDEX "idx_user_list_items_lookup" ON "public"."user_list_items" USING "btree" ("list_item_id", "list_id") WHERE ("list_id" = '00000000-0000-0000-0000-000000000000'::"uuid");
 
 
 
