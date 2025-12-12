@@ -25,16 +25,30 @@ interface JoinFamilyPayload {
 
 interface MemberPayload extends CreateFamilyMemberPayload {}
 
+interface SetFoodNotePayload {
+    content: Record<string, unknown>
+    version: number
+}
+
 export function registerFamilyRoutes(router: Router) {
     router
         .post('/ingredicheck/family', createFamily)
         .get('/ingredicheck/family', getFamily)
+        .post('/ingredicheck/family/personal', initPersonalFamily)
         .post('/ingredicheck/family/invite', createInvite)
         .post('/ingredicheck/family/join', joinFamily)
         .post('/ingredicheck/family/leave', leaveFamily)
         .post('/ingredicheck/family/members', addMember)
         .patch('/ingredicheck/family/members/:id', editMember)
         .delete('/ingredicheck/family/members/:id', deleteMember)
+        // Food notes routes
+        .get('/ingredicheck/family/food-notes/all', getAllFoodNotes)
+        .get('/ingredicheck/family/food-notes/history', getFoodNoteHistory)
+        .get('/ingredicheck/family/food-notes', getFoodNote)
+        .put('/ingredicheck/family/food-notes', setFoodNote)
+        .get('/ingredicheck/family/members/:id/food-notes/history', getMemberFoodNoteHistory)
+        .get('/ingredicheck/family/members/:id/food-notes', getMemberFoodNote)
+        .put('/ingredicheck/family/members/:id/food-notes', setMemberFoodNote)
 
     return router
 }
@@ -297,5 +311,220 @@ function handleError(ctx: FamilyContext, message: string, error: unknown) {
 
 function isSupabaseError(error: unknown): error is { message?: string } {
     return Boolean(error && typeof error === 'object' && 'message' in error)
+}
+
+// Food Notes Handlers
+
+async function initPersonalFamily(ctx: FamilyContext) {
+    try {
+        const body = await ctx.request.body({ type: 'json' }).value as CreateFamilyMemberPayload
+
+        const check = validateMemberInput(body)
+        if (!check.ok) {
+            ctx.response.status = 400
+            ctx.response.body = { error: check.error }
+            return
+        }
+
+        const { data, error } = await ctx.state.supabaseClient.rpc('init_personal_family', {
+            self_member: body
+        })
+
+        if (error) throw error
+
+        ctx.response.status = 201
+        ctx.response.body = data
+    } catch (error) {
+        handleError(ctx, 'Error creating personal family', error)
+    }
+}
+
+async function getAllFoodNotes(ctx: FamilyContext) {
+    try {
+        const { data, error } = await ctx.state.supabaseClient.rpc('get_all_food_notes')
+
+        if (error) throw error
+
+        ctx.response.status = 200
+        ctx.response.body = data
+    } catch (error) {
+        handleError(ctx, 'Error fetching food notes', error)
+    }
+}
+
+async function getFoodNote(ctx: FamilyContext) {
+    try {
+        const { data, error } = await ctx.state.supabaseClient.rpc('get_food_note', {
+            target_member_id: null
+        })
+
+        if (error) throw error
+
+        ctx.response.status = 200
+        ctx.response.body = data
+    } catch (error) {
+        handleError(ctx, 'Error fetching food note', error)
+    }
+}
+
+async function setFoodNote(ctx: FamilyContext) {
+    try {
+        const body = await ctx.request.body({ type: 'json' }).value as SetFoodNotePayload
+
+        if (typeof body.content !== 'object' || body.content === null) {
+            ctx.response.status = 400
+            ctx.response.body = { error: 'content must be a JSON object' }
+            return
+        }
+
+        if (typeof body.version !== 'number' || !Number.isInteger(body.version) || body.version < 0) {
+            ctx.response.status = 400
+            ctx.response.body = { error: 'version must be a non-negative integer' }
+            return
+        }
+
+        const { data, error } = await ctx.state.supabaseClient.rpc('set_food_note', {
+            target_member_id: null,
+            content: body.content,
+            expected_version: body.version
+        })
+
+        if (error) throw error
+
+        ctx.response.status = 200
+        ctx.response.body = data
+    } catch (error) {
+        handleError(ctx, 'Error setting food note', error)
+    }
+}
+
+async function getFoodNoteHistory(ctx: FamilyContext) {
+    try {
+        const url = new URL(ctx.request.url)
+        const limit = parseInt(url.searchParams.get('limit') ?? '10', 10)
+        const offset = parseInt(url.searchParams.get('offset') ?? '0', 10)
+
+        const { data, error } = await ctx.state.supabaseClient.rpc('get_food_note_history', {
+            target_member_id: null,
+            history_limit: limit,
+            history_offset: offset
+        })
+
+        if (error) throw error
+
+        ctx.response.status = 200
+        ctx.response.body = data
+    } catch (error) {
+        handleError(ctx, 'Error fetching food note history', error)
+    }
+}
+
+async function getMemberFoodNote(ctx: FamilyContext) {
+    try {
+        const memberId = ctx.params.id
+
+        if (!memberId) {
+            ctx.response.status = 400
+            ctx.response.body = { error: 'Member id is required' }
+            return
+        }
+
+        if (!isValidUuid(memberId)) {
+            ctx.response.status = 400
+            ctx.response.body = { error: 'Invalid member id format' }
+            return
+        }
+
+        const { data, error } = await ctx.state.supabaseClient.rpc('get_food_note', {
+            target_member_id: memberId
+        })
+
+        if (error) throw error
+
+        ctx.response.status = 200
+        ctx.response.body = data
+    } catch (error) {
+        handleError(ctx, 'Error fetching member food note', error)
+    }
+}
+
+async function setMemberFoodNote(ctx: FamilyContext) {
+    try {
+        const memberId = ctx.params.id
+
+        if (!memberId) {
+            ctx.response.status = 400
+            ctx.response.body = { error: 'Member id is required' }
+            return
+        }
+
+        if (!isValidUuid(memberId)) {
+            ctx.response.status = 400
+            ctx.response.body = { error: 'Invalid member id format' }
+            return
+        }
+
+        const body = await ctx.request.body({ type: 'json' }).value as SetFoodNotePayload
+
+        if (typeof body.content !== 'object' || body.content === null) {
+            ctx.response.status = 400
+            ctx.response.body = { error: 'content must be a JSON object' }
+            return
+        }
+
+        if (typeof body.version !== 'number' || !Number.isInteger(body.version) || body.version < 0) {
+            ctx.response.status = 400
+            ctx.response.body = { error: 'version must be a non-negative integer' }
+            return
+        }
+
+        const { data, error } = await ctx.state.supabaseClient.rpc('set_food_note', {
+            target_member_id: memberId,
+            content: body.content,
+            expected_version: body.version
+        })
+
+        if (error) throw error
+
+        ctx.response.status = 200
+        ctx.response.body = data
+    } catch (error) {
+        handleError(ctx, 'Error setting member food note', error)
+    }
+}
+
+async function getMemberFoodNoteHistory(ctx: FamilyContext) {
+    try {
+        const memberId = ctx.params.id
+
+        if (!memberId) {
+            ctx.response.status = 400
+            ctx.response.body = { error: 'Member id is required' }
+            return
+        }
+
+        if (!isValidUuid(memberId)) {
+            ctx.response.status = 400
+            ctx.response.body = { error: 'Invalid member id format' }
+            return
+        }
+
+        const url = new URL(ctx.request.url)
+        const limit = parseInt(url.searchParams.get('limit') ?? '10', 10)
+        const offset = parseInt(url.searchParams.get('offset') ?? '0', 10)
+
+        const { data, error } = await ctx.state.supabaseClient.rpc('get_food_note_history', {
+            target_member_id: memberId,
+            history_limit: limit,
+            history_offset: offset
+        })
+
+        if (error) throw error
+
+        ctx.response.status = 200
+        ctx.response.body = data
+    } catch (error) {
+        handleError(ctx, 'Error fetching member food note history', error)
+    }
 }
 

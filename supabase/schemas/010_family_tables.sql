@@ -3,6 +3,7 @@
 CREATE TABLE public.families (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     name text NOT NULL,
+    is_personal boolean NOT NULL DEFAULT false,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -45,4 +46,7 @@ CREATE TRIGGER tr_invite_codes_set_updated_at
 BEFORE UPDATE ON public.invite_codes
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
+
+-- Index for finding user's member records efficiently
+CREATE INDEX idx_members_user_id ON public.members(user_id) WHERE user_id IS NOT NULL;
 
