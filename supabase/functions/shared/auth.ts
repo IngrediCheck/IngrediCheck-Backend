@@ -1,32 +1,26 @@
 import { Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
-import { createClient } from '@supabase/supabase-js'
+import { jwtVerify, createRemoteJWKSet, importJWK, JWK } from 'https://deno.land/x/jose@v5.2.0/index.ts'
 
 const textEncoder = new TextEncoder()
-const textDecoder = new TextDecoder()
 
+// Environment configuration
+const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
 const jwtSecret = Deno.env.get('SUPABASE_JWT_SECRET') ?? Deno.env.get('JWT_SECRET') ?? ''
-let jwtKeyPromise: Promise<CryptoKey | null> | null = null
 
-function base64UrlToUint8Array(input: string): Uint8Array {
-    let normalized = input.replace(/-/g, '+').replace(/_/g, '/')
-    const padding = normalized.length % 4
-    if (padding) {
-        normalized += '='.repeat(4 - padding)
-    }
-    const binary = atob(normalized)
-    const bytes = new Uint8Array(binary.length)
-    for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i)
-    }
-    return bytes
-}
+// JWKS for asymmetric key verification (production)
+const JWKS = supabaseUrl
+    ? createRemoteJWKSet(new URL(`${supabaseUrl}/auth/v1/.well-known/jwks.json`))
+    : null
 
-async function getJwtKey(): Promise<CryptoKey | null> {
+// Cached HMAC key for HS256 verification (local development)
+let hmacKeyPromise: Promise<CryptoKey | null> | null = null
+
+async function getHmacKey(): Promise<CryptoKey | null> {
     if (!jwtSecret) {
         return null
     }
-    if (!jwtKeyPromise) {
-        jwtKeyPromise = crypto.subtle.importKey(
+    if (!hmacKeyPromise) {
+        hmacKeyPromise = crypto.subtle.importKey(
             'raw',
             textEncoder.encode(jwtSecret),
             { name: 'HMAC', hash: 'SHA-256' },
@@ -34,7 +28,7 @@ async function getJwtKey(): Promise<CryptoKey | null> {
             ['verify']
         ).catch(() => null)
     }
-    return await jwtKeyPromise
+    return await hmacKeyPromise
 }
 
 function parseAuthorizationHeader(ctx: Context): string | null {
@@ -56,12 +50,12 @@ export async function decodeUserIdFromRequest(ctx: Context): Promise<string> {
         throw new Error('Missing authorization header')
     }
 
-    let userId: string | null = null
+    // Try JWKS first (production path - asymmetric keys)
+    let userId = await verifyJwtWithJwks(token)
 
-    if (jwtSecret) {
-        userId = await decodeUserIdFromJwt(token)
-    } else {
-        userId = await fetchUserIdFromSupabase(token)
+    // Fall back to HS256 if JWKS verification fails and JWT_SECRET is available
+    if (!userId && jwtSecret) {
+        userId = await verifyJwtWithHmac(token)
     }
 
     if (userId && userId.length > 0) {
@@ -72,78 +66,90 @@ export async function decodeUserIdFromRequest(ctx: Context): Promise<string> {
     throw new Error('Unauthorized: No valid user found')
 }
 
-export async function decodeUserIdFromJwt(token: string): Promise<string | null> {
-    let payload: Record<string, unknown> | null = null
-
-    try {
-        payload = await verifyJwt(token)
-    } catch (_error) {
-        payload = null
+async function verifyJwtWithJwks(token: string): Promise<string | null> {
+    if (!JWKS) {
+        return null
     }
 
-    const sub = payload?.sub
-    return typeof sub === 'string' ? sub : null
+    try {
+        const { payload } = await jwtVerify(token, JWKS, {
+            issuer: `${supabaseUrl}/auth/v1`
+        })
+        return typeof payload.sub === 'string' ? payload.sub : null
+    } catch {
+        return null
+    }
 }
 
-async function verifyJwt(token: string): Promise<Record<string, unknown> | null> {
+function base64UrlToUint8Array(input: string): Uint8Array {
+    let normalized = input.replace(/-/g, '+').replace(/_/g, '/')
+    const padding = normalized.length % 4
+    if (padding) {
+        normalized += '='.repeat(4 - padding)
+    }
+    const binary = atob(normalized)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i)
+    }
+    return bytes
+}
+
+async function verifyJwtWithHmac(token: string): Promise<string | null> {
     const parts = token.split('.')
     if (parts.length !== 3) {
         return null
     }
 
-    const key = await getJwtKey()
+    const key = await getHmacKey()
     if (!key) {
         return null
     }
 
     const [headerB64, payloadB64, signatureB64] = parts
+
+    // Verify header
+    const textDecoder = new TextDecoder()
     const headerJson = textDecoder.decode(base64UrlToUint8Array(headerB64))
     const header = JSON.parse(headerJson) as Record<string, unknown>
     if (header['alg'] !== 'HS256') {
         return null
     }
 
+    // Verify signature
     const signature = base64UrlToUint8Array(signatureB64)
     const data = textEncoder.encode(`${headerB64}.${payloadB64}`)
-
     const verified = await crypto.subtle.verify('HMAC', key, signature, data)
     if (!verified) {
         return null
     }
 
+    // Parse and validate payload
     const payloadJson = textDecoder.decode(base64UrlToUint8Array(payloadB64))
     const payload = JSON.parse(payloadJson) as Record<string, unknown>
 
+    // Check expiration
     const now = Math.floor(Date.now() / 1000)
     const exp = payload?.exp
     if (typeof exp !== 'number' || !Number.isFinite(exp) || now >= exp) {
         return null
     }
 
+    // Check not-before
     const nbf = payload?.nbf
     if (typeof nbf === 'number' && Number.isFinite(nbf) && now < nbf) {
         return null
     }
 
-    return payload
+    const sub = payload?.sub
+    return typeof sub === 'string' ? sub : null
 }
 
-async function fetchUserIdFromSupabase(token: string): Promise<string | null> {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
-    const apiKey = serviceRoleKey ?? anonKey
-    if (!supabaseUrl || !apiKey) {
-        return null
+// Export for backward compatibility if needed elsewhere
+export async function decodeUserIdFromJwt(token: string): Promise<string | null> {
+    let userId = await verifyJwtWithJwks(token)
+    if (!userId && jwtSecret) {
+        userId = await verifyJwtWithHmac(token)
     }
-
-    const supabaseClient = createClient(supabaseUrl, apiKey, {
-        auth: { persistSession: false }
-    })
-    const { data, error } = await supabaseClient.auth.getUser(token)
-    if (error) {
-        return null
-    }
-    const userId = data.user?.id
-    return typeof userId === 'string' && userId.length > 0 ? userId : null
+    return userId
 }
