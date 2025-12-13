@@ -140,6 +140,14 @@ redirect_uri = ""
 # or any other third-party OIDC providers.
 url = ""
 
+# Disable gateway JWT verification - our code handles auth
+# This is needed because the gateway may reject valid ES256 tokens during JWKS transition
+[functions.ingredicheck]
+verify_jwt = false
+
+[functions.background]
+verify_jwt = false
+
 [analytics]
 enabled = false
 port = 54327

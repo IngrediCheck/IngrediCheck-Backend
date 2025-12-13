@@ -26,26 +26,29 @@ app.use(async (ctx, next) => {
     } catch (error) {
         const detail = error instanceof Error ? error.message : 'Unauthorized'
         ctx.response.status = 401
-        // Format error response to match test expectations
-        // Handle various auth error formats that might come from different environments
-        let errorMessage = 'Unauthorized'
-        if (detail.includes('Missing authorization header') || 
-            detail.includes("Auth header is not") ||
-            detail.includes('No valid user found')) {
-            errorMessage = 'Error: Missing authorization header'
-        }
-        ctx.response.body = { error: errorMessage }
+        // Return full error detail for debugging auth issues
+        ctx.response.body = { error: detail }
         return
     }
 
-    ctx.state.supabaseClient = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-        {
-            auth: { persistSession: false },
-            global: { headers: { Authorization: ctx.request.headers.get('Authorization')! } }
-        }
-    )
+    // Lazy client creation - only creates when first accessed
+    let _supabaseClient: ReturnType<typeof createClient> | null = null
+    Object.defineProperty(ctx.state, 'supabaseClient', {
+        get() {
+            if (!_supabaseClient) {
+                _supabaseClient = createClient(
+                    Deno.env.get('SUPABASE_URL') ?? '',
+                    Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+                    {
+                        auth: { persistSession: false },
+                        global: { headers: { Authorization: ctx.request.headers.get('Authorization')! } }
+                    }
+                )
+            }
+            return _supabaseClient
+        },
+        configurable: true
+    })
     ctx.state.activityId = crypto.randomUUID()
     await next()
 })

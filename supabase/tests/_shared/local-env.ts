@@ -306,8 +306,13 @@ async function createLocalFunctionsEnv(): Promise<void> {
   // Add local-only test values if needed
   envContent.push("");
   envContent.push("# Local-only test values");
-  envContent.push("SUPABASE_JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long");
-  console.log("   ✓ SUPABASE_JWT_SECRET added to local .env (generated)");
+  // Local Supabase uses HS256 (shared secret), not asymmetric keys
+  // Production uses JWKS (asymmetric). The auth code supports both:
+  // 1. JWKS verification (production path - asymmetric keys)
+  // 2. HS256 verification (local path - when JWKS is empty)
+  // Note: Must use JWT_SECRET not SUPABASE_JWT_SECRET - Supabase CLI skips SUPABASE_ prefixed vars
+  envContent.push("JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long");
+  console.log("   ✓ JWT_SECRET added to local .env (for HS256 verification)");
   envContent.push("LOCAL_ENV=true");
   envContent.push(`LOCAL_SUPABASE_URL=http://127.0.0.1:54321`);
   

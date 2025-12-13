@@ -2,3 +2,4 @@ local/finetuning/preferencevalidatordataset/.env
 .env
 supabase/tests/**/.env-state.json
 supabase/functions/.env
+supabase/functions/deno.lock
