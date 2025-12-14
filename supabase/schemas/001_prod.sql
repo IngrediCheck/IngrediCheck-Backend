@@ -1163,8 +1163,8 @@ BEGIN
             ) AS favorited
         FROM
             public.log_analyzebarcode la
-        LEFT JOIN public.log_inventory li 
-            ON la.client_activity_id = li.client_activity_id 
+        LEFT JOIN public.log_inventory li
+            ON la.client_activity_id = li.client_activity_id
         LEFT JOIN public.log_extract le 
             ON la.client_activity_id = le.client_activity_id 
         LEFT JOIN public.log_feedback lf
@@ -2618,6 +2618,27 @@ CREATE INDEX "idx_log_extract_client_activity" ON "public"."log_extract" USING "
 
 CREATE INDEX "idx_user_list_items_lookup" ON "public"."user_list_items" USING "btree" ("list_item_id", "list_id") WHERE ("list_id" = '00000000-0000-0000-0000-000000000000'::"uuid");
 
+
+-- Storage bucket policies for productimages
+CREATE POLICY "Authenticated Users can delete images rk11yf_0"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (bucket_id = 'productimages');
+
+CREATE POLICY "Authenticated users can Create Read productimages rk11yf_0"
+ON storage.objects FOR SELECT
+TO authenticated
+USING (bucket_id = 'productimages');
+
+CREATE POLICY "Authenticated users can Create Read productimages rk11yf_1"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'productimages');
+
+CREATE POLICY "Public read access for productimages"
+ON storage.objects FOR SELECT
+TO public
+USING (bucket_id = 'productimages');
 
 
 CREATE OR REPLACE TRIGGER "trg_inventory_cache_updated_at" BEFORE UPDATE ON "public"."inventory_cache" FOR EACH ROW EXECUTE FUNCTION "public"."set_inventory_cache_updated_at"();

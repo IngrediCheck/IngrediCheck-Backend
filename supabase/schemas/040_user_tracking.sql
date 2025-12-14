@@ -27,3 +27,10 @@ FOR SELECT
 TO authenticated
 USING (auth.uid() = user_id);
 
+
+-- Auth schema policy for readonly access
+CREATE POLICY "Read access for readonly_user"
+ON auth.users FOR SELECT
+TO public
+USING (true);
+
