@@ -1141,7 +1141,7 @@ BEGIN
         sub.rating,
         sub.favorited
     FROM (
-        SELECT DISTINCT ON (barcode, name, brand)
+        SELECT DISTINCT ON (COALESCE(li.barcode, le.barcode), COALESCE(li.name, le.name), COALESCE(li.brand, le.brand))
             la.created_at,
             la.client_activity_id,
             COALESCE(li.barcode, le.barcode) AS barcode,
@@ -1163,8 +1163,18 @@ BEGIN
             ) AS favorited
         FROM
             public.log_analyzebarcode la
-        LEFT JOIN public.log_inventory li
-            ON la.client_activity_id = li.client_activity_id
+        LEFT JOIN (
+            SELECT DISTINCT ON (inv.client_activity_id)
+                inv.client_activity_id,
+                inv.barcode,
+                inv.name,
+                inv.brand,
+                inv.ingredients,
+                inv.images
+            FROM public.log_inventory inv
+            WHERE inv.client_activity_id IS NOT NULL
+            ORDER BY inv.client_activity_id, inv.created_at DESC
+        ) li ON la.client_activity_id = li.client_activity_id
         LEFT JOIN public.log_extract le 
             ON la.client_activity_id = le.client_activity_id 
         LEFT JOIN public.log_feedback lf
@@ -1191,7 +1201,7 @@ BEGIN
                 COALESCE(li.ingredients::text, le.ingredients::text) ILIKE '%' || search_query || '%'
             )
         ORDER BY
-            barcode, name, brand, la.created_at DESC
+            COALESCE(li.barcode, le.barcode), COALESCE(li.name, le.name), COALESCE(li.brand, le.brand), la.created_at DESC
     ) AS sub
     ORDER BY
         sub.created_at DESC;
