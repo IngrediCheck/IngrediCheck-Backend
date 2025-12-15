@@ -12,6 +12,7 @@ import { registerMemojiRoutes } from './memoji.ts'
 import { decodeUserIdFromRequest } from '../shared/auth.ts'
 import { registerFamilyRoutes } from './family.ts'
 import * as Devices from './devices.ts'
+import * as Scan from './scan.ts'
 
 const app = new Application()
 const supabaseServiceUrl = Deno.env.get('SUPABASE_URL') ?? ''
@@ -346,6 +347,9 @@ router
     .get('/ingredicheck/history', async (ctx) => {
         const searchText = ctx.request.url.searchParams.get("searchText")
         await History.get(ctx, searchText)
+    })
+    .get('/ingredicheck/scan/history', async (ctx) => {
+        await Scan.getHistory(ctx)
     })
     .post('/ingredicheck/analyze', async (ctx) => {
         await Analyzer.analyze(ctx)
