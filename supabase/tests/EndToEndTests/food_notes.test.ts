@@ -368,7 +368,7 @@ Deno.test("food notes: member food note CRUD", async () => {
   assertDeepEquals(data?.content, { likes: "pizza" }, "Member note content should match");
 });
 
-Deno.test("food notes: optimistic locking - version mismatch", async () => {
+Deno.test("food notes: optimistic locking - version mismatch returns 409 with current note", async () => {
   const { accessToken, baseUrl } = await signInAnon();
 
   await call({
@@ -381,6 +381,89 @@ Deno.test("food notes: optimistic locking - version mismatch", async () => {
   });
 
   // Create note
+  const originalContent = { v: 1, data: "original" };
+  await call({
+    accessToken,
+    baseUrl,
+    path: "/ingredicheck/family/food-notes",
+    method: "PUT",
+    body: { content: originalContent, version: 0 },
+    expectStatus: 200,
+  });
+
+  // Try to update with wrong version - should get 409 with current note
+  const { status, data } = await call<{ error: string; currentNote: { content: unknown; version: number; updatedAt: string } }>({
+    accessToken,
+    baseUrl,
+    path: "/ingredicheck/family/food-notes",
+    method: "PUT",
+    body: { content: { v: 2 }, version: 0 },
+    parseJson: true,
+  });
+
+  assertEquals(status, 409, "Should return 409 Conflict");
+  assertEquals(data?.error, "version_mismatch", "Error should be version_mismatch");
+  assertDeepEquals(data?.currentNote?.content, originalContent, "Current note content should match");
+  assertEquals(data?.currentNote?.version, 1, "Current note version should be 1");
+  assertNotEquals(data?.currentNote?.updatedAt, undefined, "Current note should have updatedAt");
+});
+
+Deno.test("food notes: optimistic locking - member note version mismatch returns 409", async () => {
+  const { accessToken, baseUrl } = await signInAnon();
+  const memberId = crypto.randomUUID();
+
+  await call({
+    accessToken,
+    baseUrl,
+    path: "/ingredicheck/family",
+    method: "POST",
+    body: {
+      name: "Test Family",
+      selfMember: { id: crypto.randomUUID(), name: "Self", color: "#000000" },
+      otherMembers: [{ id: memberId, name: "Other", color: "#111111" }],
+    },
+    expectStatus: 201,
+  });
+
+  // Create member note
+  const originalContent = { diet: "vegan" };
+  await call({
+    accessToken,
+    baseUrl,
+    path: `/ingredicheck/family/members/${memberId}/food-notes`,
+    method: "PUT",
+    body: { content: originalContent, version: 0 },
+    expectStatus: 200,
+  });
+
+  // Try to update with wrong version
+  const { status, data } = await call<{ error: string; currentNote: { content: unknown; version: number } }>({
+    accessToken,
+    baseUrl,
+    path: `/ingredicheck/family/members/${memberId}/food-notes`,
+    method: "PUT",
+    body: { content: { diet: "keto" }, version: 0 },
+    parseJson: true,
+  });
+
+  assertEquals(status, 409, "Should return 409 Conflict");
+  assertEquals(data?.error, "version_mismatch", "Error should be version_mismatch");
+  assertDeepEquals(data?.currentNote?.content, originalContent, "Current note should contain original content");
+});
+
+Deno.test("food notes: optimistic locking - client can retry with correct version", async () => {
+  const { accessToken, baseUrl } = await signInAnon();
+
+  await call({
+    accessToken,
+    baseUrl,
+    path: "/ingredicheck/family/personal",
+    method: "POST",
+    body: { id: crypto.randomUUID(), name: "Solo", color: "#264653" },
+    expectStatus: 201,
+  });
+
+  // Create note v1
   await call({
     accessToken,
     baseUrl,
@@ -390,16 +473,223 @@ Deno.test("food notes: optimistic locking - version mismatch", async () => {
     expectStatus: 200,
   });
 
-  // Try to update with wrong version
-  const { status } = await call({
+  // First client tries to update with stale version 0 - gets conflict with current state
+  const { data: conflictData } = await call<{ error: string; currentNote: { version: number } }>({
     accessToken,
     baseUrl,
     path: "/ingredicheck/family/food-notes",
     method: "PUT",
-    body: { content: { v: 2 }, version: 0 },
+    body: { content: { v: "stale_update" }, version: 0 },
+    expectStatus: 409,
+    parseJson: true,
   });
 
-  assertNotEquals(status, 200, "Should fail with version mismatch");
+  // Client retries with correct version from conflict response
+  const { data: retryResult } = await call<{ content: unknown; version: number }>({
+    accessToken,
+    baseUrl,
+    path: "/ingredicheck/family/food-notes",
+    method: "PUT",
+    body: { content: { v: "retry_success" }, version: conflictData?.currentNote?.version ?? 1 },
+    expectStatus: 200,
+    parseJson: true,
+  });
+
+  assertEquals(retryResult?.version, 2, "Retry should succeed with version 2");
+  assertDeepEquals(retryResult?.content, { v: "retry_success" }, "Content should be updated");
+});
+
+Deno.test("food notes: optimistic locking - creating new note with non-zero version fails", async () => {
+  const { accessToken, baseUrl } = await signInAnon();
+
+  await call({
+    accessToken,
+    baseUrl,
+    path: "/ingredicheck/family/personal",
+    method: "POST",
+    body: { id: crypto.randomUUID(), name: "Solo", color: "#264653" },
+    expectStatus: 201,
+  });
+
+  // Try to create note with non-zero version
+  const { status, data } = await call<{ error: string; currentNote: null }>({
+    accessToken,
+    baseUrl,
+    path: "/ingredicheck/family/food-notes",
+    method: "PUT",
+    body: { content: { v: 1 }, version: 5 },
+    parseJson: true,
+  });
+
+  assertEquals(status, 409, "Should return 409 Conflict");
+  assertEquals(data?.error, "version_mismatch", "Error should be version_mismatch");
+  assertEquals(data?.currentNote, null, "Current note should be null since no note exists");
+});
+
+Deno.test("food notes: optimistic locking - client behind by multiple versions", async () => {
+  const { accessToken, baseUrl } = await signInAnon();
+
+  await call({
+    accessToken,
+    baseUrl,
+    path: "/ingredicheck/family/personal",
+    method: "POST",
+    body: { id: crypto.randomUUID(), name: "Solo", color: "#264653" },
+    expectStatus: 201,
+  });
+
+  // Create note and update multiple times
+  for (let i = 0; i < 5; i++) {
+    await call({
+      accessToken,
+      baseUrl,
+      path: "/ingredicheck/family/food-notes",
+      method: "PUT",
+      body: { content: { iteration: i + 1 }, version: i },
+      expectStatus: 200,
+    });
+  }
+
+  // Client tries to update with very old version
+  const { status, data } = await call<{ error: string; currentNote: { content: unknown; version: number } }>({
+    accessToken,
+    baseUrl,
+    path: "/ingredicheck/family/food-notes",
+    method: "PUT",
+    body: { content: { stale: true }, version: 1 },
+    parseJson: true,
+  });
+
+  assertEquals(status, 409, "Should return 409 Conflict");
+  assertEquals(data?.currentNote?.version, 5, "Should return current version 5");
+  assertDeepEquals(data?.currentNote?.content, { iteration: 5 }, "Should return latest content");
+});
+
+Deno.test("food notes: concurrent updates - second update fails with current state", async () => {
+  const { accessToken, baseUrl } = await signInAnon();
+
+  await call({
+    accessToken,
+    baseUrl,
+    path: "/ingredicheck/family/personal",
+    method: "POST",
+    body: { id: crypto.randomUUID(), name: "Solo", color: "#264653" },
+    expectStatus: 201,
+  });
+
+  // Create initial note
+  await call({
+    accessToken,
+    baseUrl,
+    path: "/ingredicheck/family/food-notes",
+    method: "PUT",
+    body: { content: { initial: true }, version: 0 },
+    expectStatus: 200,
+  });
+
+  // Simulate concurrent updates by making two requests with the same version
+  // First update succeeds
+  const { data: firstResult } = await call<{ content: unknown; version: number }>({
+    accessToken,
+    baseUrl,
+    path: "/ingredicheck/family/food-notes",
+    method: "PUT",
+    body: { content: { updatedBy: "first" }, version: 1 },
+    expectStatus: 200,
+    parseJson: true,
+  });
+
+  assertEquals(firstResult?.version, 2, "First update should succeed with version 2");
+
+  // Second update with same original version fails
+  const { status, data: secondResult } = await call<{ error: string; currentNote: { content: unknown; version: number } }>({
+    accessToken,
+    baseUrl,
+    path: "/ingredicheck/family/food-notes",
+    method: "PUT",
+    body: { content: { updatedBy: "second" }, version: 1 },
+    parseJson: true,
+  });
+
+  assertEquals(status, 409, "Second update should return 409");
+  assertDeepEquals(secondResult?.currentNote?.content, { updatedBy: "first" }, "Should return first update's content");
+  assertEquals(secondResult?.currentNote?.version, 2, "Should return version from first update");
+});
+
+Deno.test("food notes: concurrent updates from different users in same family", async () => {
+  const alice = await signInAnon();
+  const bob = await signInAnon();
+  const aliceId = crypto.randomUUID();
+  const bobId = crypto.randomUUID();
+
+  // Alice creates family
+  await call({
+    accessToken: alice.accessToken,
+    baseUrl: alice.baseUrl,
+    path: "/ingredicheck/family",
+    method: "POST",
+    body: {
+      name: "Family",
+      selfMember: { id: aliceId, name: "Alice", color: "#000000" },
+      otherMembers: [{ id: bobId, name: "Bob", color: "#111111" }],
+    },
+    expectStatus: 201,
+  });
+
+  // Alice invites Bob
+  const { data: invite } = await call<{ inviteCode: string }>({
+    accessToken: alice.accessToken,
+    baseUrl: alice.baseUrl,
+    path: "/ingredicheck/family/invite",
+    method: "POST",
+    body: { memberID: bobId },
+    expectStatus: 201,
+    parseJson: true,
+  });
+
+  // Bob joins
+  await call({
+    accessToken: bob.accessToken,
+    baseUrl: bob.baseUrl,
+    path: "/ingredicheck/family/join",
+    method: "POST",
+    body: { inviteCode: invite?.inviteCode },
+    expectStatus: 201,
+  });
+
+  // Alice creates family note
+  await call({
+    accessToken: alice.accessToken,
+    baseUrl: alice.baseUrl,
+    path: "/ingredicheck/family/food-notes",
+    method: "PUT",
+    body: { content: { by: "alice", version: "initial" }, version: 0 },
+    expectStatus: 200,
+  });
+
+  // Both Alice and Bob read the note (both have version 1)
+  // Alice updates first
+  await call({
+    accessToken: alice.accessToken,
+    baseUrl: alice.baseUrl,
+    path: "/ingredicheck/family/food-notes",
+    method: "PUT",
+    body: { content: { by: "alice", version: "updated" }, version: 1 },
+    expectStatus: 200,
+  });
+
+  // Bob tries to update with stale version
+  const { status, data } = await call<{ error: string; currentNote: { content: { by: string } } }>({
+    accessToken: bob.accessToken,
+    baseUrl: bob.baseUrl,
+    path: "/ingredicheck/family/food-notes",
+    method: "PUT",
+    body: { content: { by: "bob" }, version: 1 },
+    parseJson: true,
+  });
+
+  assertEquals(status, 409, "Bob's update should fail with 409");
+  assertEquals(data?.currentNote?.content?.by, "alice", "Current note should show Alice's update");
 });
 
 Deno.test("food notes: unjoined member can have notes", async () => {

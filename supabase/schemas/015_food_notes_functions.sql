@@ -227,7 +227,16 @@ BEGIN
     -- Check version for optimistic locking
     IF existing_note.id IS NOT NULL THEN
         IF existing_note.version <> expected_version THEN
-            RAISE EXCEPTION 'Version mismatch: expected %, got %', expected_version, existing_note.version;
+            -- Return current note on version mismatch instead of raising exception
+            RETURN jsonb_build_object(
+                'success', false,
+                'error', 'version_mismatch',
+                'currentNote', jsonb_build_object(
+                    'content', existing_note.content,
+                    'version', existing_note.version,
+                    'updatedAt', existing_note.updated_at
+                )
+            );
         END IF;
         new_version := existing_note.version + 1;
 
@@ -264,7 +273,12 @@ BEGIN
     ELSE
         -- Create new note (expected_version should be 0)
         IF expected_version <> 0 THEN
-            RAISE EXCEPTION 'Version mismatch: expected 0 for new note, got %', expected_version;
+            -- Return error for new note with non-zero version
+            RETURN jsonb_build_object(
+                'success', false,
+                'error', 'version_mismatch',
+                'currentNote', null
+            );
         END IF;
         new_version := 1;
 
@@ -282,9 +296,12 @@ BEGIN
     END IF;
 
     RETURN jsonb_build_object(
-        'content', result_note.content,
-        'version', result_note.version,
-        'updatedAt', result_note.updated_at
+        'success', true,
+        'note', jsonb_build_object(
+            'content', result_note.content,
+            'version', result_note.version,
+            'updatedAt', result_note.updated_at
+        )
     );
 END;
 $$;

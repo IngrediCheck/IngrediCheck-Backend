@@ -391,8 +391,18 @@ async function setFoodNote(ctx: FamilyContext) {
 
         if (error) throw error
 
+        // Check for version mismatch (optimistic locking conflict)
+        if (data?.success === false) {
+            ctx.response.status = 409
+            ctx.response.body = {
+                error: data.error,
+                currentNote: data.currentNote
+            }
+            return
+        }
+
         ctx.response.status = 200
-        ctx.response.body = data
+        ctx.response.body = data.note
     } catch (error) {
         handleError(ctx, 'Error setting food note', error)
     }
@@ -486,8 +496,18 @@ async function setMemberFoodNote(ctx: FamilyContext) {
 
         if (error) throw error
 
+        // Check for version mismatch (optimistic locking conflict)
+        if (data?.success === false) {
+            ctx.response.status = 409
+            ctx.response.body = {
+                error: data.error,
+                currentNote: data.currentNote
+            }
+            return
+        }
+
         ctx.response.status = 200
-        ctx.response.body = data
+        ctx.response.body = data.note
     } catch (error) {
         handleError(ctx, 'Error setting member food note', error)
     }
