@@ -340,26 +340,49 @@ router
         }
         ctx.response.status = 204
     })
+    // @deprecated - Use POST /ingredicheck/v2/scan/barcode instead (see inventory.ts)
     .get('/ingredicheck/inventory/:barcode', async (ctx) => {
         const clientActivityId = ctx.request.url.searchParams.get("clientActivityId")
         await Inventory.get(ctx, ctx.params.barcode, clientActivityId)
     })
+    // @deprecated - Use GET /ingredicheck/v2/scan/history instead (see history.ts)
     .get('/ingredicheck/history', async (ctx) => {
         const searchText = ctx.request.url.searchParams.get("searchText")
         await History.get(ctx, searchText)
     })
+    // v1 Scan API (deprecated - use v2 below)
     .get('/ingredicheck/scan/history', async (ctx) => {
         await Scan.getHistory(ctx)
     })
+    // v2 Scan API endpoints (preferred)
+    .get('/ingredicheck/v2/scan/history', async (ctx) => {
+        await Scan.getHistoryV2(ctx)
+    })
+    .get('/ingredicheck/v2/scan/:scanId', async (ctx) => {
+        await Scan.getScanDetail(ctx)
+    })
+    .patch('/ingredicheck/v2/scan/:scanId/favorite', async (ctx) => {
+        await Scan.toggleFavorite(ctx)
+    })
+    .post('/ingredicheck/v2/scan/:scanId/reanalyze', async (ctx) => {
+        await Scan.reanalyze(ctx)
+    })
+    .post('/ingredicheck/v2/scan/feedback', async (ctx) => {
+        await Feedback.submitScanFeedback(ctx)
+    })
+    // @deprecated - Use POST /ingredicheck/v2/scan/barcode instead (see analyzer.ts)
     .post('/ingredicheck/analyze', async (ctx) => {
         await Analyzer.analyze(ctx)
     })
+    // @deprecated - Use POST /ingredicheck/v2/scan/barcode or /v2/scan/{id}/image instead (see analyzerv2.ts)
     .post('/ingredicheck/analyze-stream', async (ctx) => {
         await AnalyzerV2.analyzeV2(ctx)
     })
+    // @deprecated - Use POST /ingredicheck/v2/scan/{id}/image instead (see extractor.ts)
     .post('/ingredicheck/extract', async (ctx) => {
         await Extractor.extract(ctx)
     })
+    // @deprecated - Use POST /ingredicheck/v2/scan/feedback instead (see feedback.ts)
     .post('/ingredicheck/feedback', async (ctx) => {
         await Feedback.submitFeedback(ctx)
     })

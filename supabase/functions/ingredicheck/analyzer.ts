@@ -1,4 +1,23 @@
-
+/**
+ * @deprecated This module is part of the legacy analysis system.
+ *
+ * SUPERSEDED BY: The new Scan API with analysis stored in scan_analyses table
+ * - New barcode scan: POST /ingredicheck/v2/scan/barcode (SSE stream)
+ * - Analysis stored in: scan_analyses table (not log_analyzebarcode)
+ *
+ * This legacy module:
+ * - Queries log_extract table for previous extraction results
+ * - Logs to log_analyzebarcode via background function
+ * - Uses client_activity_id for tracking (legacy system)
+ * - Returns analysis inline (not stored persistently)
+ *
+ * The new scan system:
+ * - Stores analysis in scan_analyses table with food_note_snapshot
+ * - Supports re-analysis when food notes change (isStale detection)
+ * - Links analysis to specific scans via scan_id
+ *
+ * DO NOT use this for new development.
+ */
 import { Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 import * as DB from '../shared/db.ts'
 import { ingredientAnalyzerAgent } from '../shared/llm/ingredientanalyzeragent.ts'

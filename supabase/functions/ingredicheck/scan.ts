@@ -1,5 +1,6 @@
 import { Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 
+// V1 Types (snake_case for backward compatibility)
 interface ScanRow {
     id: string
     scan_type: string
@@ -61,6 +62,7 @@ interface ScanResponse {
     last_activity_at: string
 }
 
+// V1: Original getHistory (snake_case response with images)
 export async function getHistory(ctx: Context) {
     const limitParam = ctx.request.url.searchParams.get('limit')
     const offsetParam = ctx.request.url.searchParams.get('offset')
@@ -80,7 +82,7 @@ export async function getHistory(ctx: Context) {
         return
     }
 
-    // Fetch scans
+    // Fetch scans using V1 RPC
     const scansResult = await ctx.state.supabaseClient.rpc('get_scans', {
         p_limit: limit,
         p_offset: offset
@@ -166,5 +168,152 @@ export async function getHistory(ctx: Context) {
         scans,
         total,
         has_more: offset + scans.length < total
+    }
+}
+
+// V2: New getHistoryV2 (camelCase response with latestAnalysis, favorites filter)
+export async function getHistoryV2(ctx: Context) {
+    const limitParam = ctx.request.url.searchParams.get('limit')
+    const offsetParam = ctx.request.url.searchParams.get('offset')
+    const favoritedParam = ctx.request.url.searchParams.get('favorited')
+
+    const limit = limitParam ? parseInt(limitParam, 10) : 20
+    const offset = offsetParam ? parseInt(offsetParam, 10) : 0
+    const favorited = favoritedParam === 'true' ? true : favoritedParam === 'false' ? false : null
+
+    if (isNaN(limit) || limit < 1 || limit > 100) {
+        ctx.response.status = 400
+        ctx.response.body = { error: 'limit must be between 1 and 100' }
+        return
+    }
+
+    if (isNaN(offset) || offset < 0) {
+        ctx.response.status = 400
+        ctx.response.body = { error: 'offset must be non-negative' }
+        return
+    }
+
+    // Fetch scans using V2 RPC (returns JSONB with scans and totalCount)
+    const result = await ctx.state.supabaseClient.rpc('get_scans_v2', {
+        p_limit: limit,
+        p_offset: offset,
+        p_favorited: favorited
+    })
+
+    if (result.error) {
+        console.error('[scan#getHistoryV2] rpc error', result.error)
+        ctx.response.status = 500
+        ctx.response.body = { error: result.error.message ?? String(result.error) }
+        return
+    }
+
+    const data = result.data ?? { scans: [], totalCount: 0 }
+    const scans = data.scans ?? []
+    const total = data.totalCount ?? 0
+
+    ctx.response.status = 200
+    ctx.response.body = {
+        scans,
+        total,
+        has_more: offset + scans.length < total
+    }
+}
+
+export async function getScanDetail(ctx: Context) {
+    const scanId = ctx.params.scanId
+
+    if (!scanId) {
+        ctx.response.status = 400
+        ctx.response.body = { error: 'scanId is required' }
+        return
+    }
+
+    const result = await ctx.state.supabaseClient.rpc('get_scan_detail', {
+        p_scan_id: scanId
+    })
+
+    if (result.error) {
+        console.error('[scan#getScanDetail] rpc error', result.error)
+        ctx.response.status = 500
+        ctx.response.body = { error: result.error.message ?? String(result.error) }
+        return
+    }
+
+    if (!result.data) {
+        ctx.response.status = 404
+        ctx.response.body = { error: 'Scan not found' }
+        return
+    }
+
+    ctx.response.status = 200
+    ctx.response.body = result.data
+}
+
+export async function toggleFavorite(ctx: Context) {
+    const scanId = ctx.params.scanId
+
+    if (!scanId) {
+        ctx.response.status = 400
+        ctx.response.body = { error: 'scanId is required' }
+        return
+    }
+
+    const result = await ctx.state.supabaseClient.rpc('toggle_scan_favorite', {
+        p_scan_id: scanId
+    })
+
+    if (result.error) {
+        console.error('[scan#toggleFavorite] rpc error', result.error)
+        if (result.error.message?.includes('not found') || result.error.message?.includes('access denied')) {
+            ctx.response.status = 404
+            ctx.response.body = { error: 'Scan not found' }
+            return
+        }
+        ctx.response.status = 500
+        ctx.response.body = { error: result.error.message ?? String(result.error) }
+        return
+    }
+
+    ctx.response.status = 200
+    ctx.response.body = result.data
+}
+
+export async function reanalyze(ctx: Context) {
+    const scanId = ctx.params.scanId
+
+    if (!scanId) {
+        ctx.response.status = 400
+        ctx.response.body = { error: 'scanId is required' }
+        return
+    }
+
+    // Verify scan exists and belongs to user
+    const scanResult = await ctx.state.supabaseClient
+        .from('scans')
+        .select('id, user_id, product_info')
+        .eq('id', scanId)
+        .single()
+
+    if (scanResult.error || !scanResult.data) {
+        ctx.response.status = 404
+        ctx.response.body = { error: 'Scan not found' }
+        return
+    }
+
+    // Get the AI API URL from env
+    const aiApiUrl = Deno.env.get('AI_API_URL')
+    if (!aiApiUrl) {
+        ctx.response.status = 500
+        ctx.response.body = { error: 'AI API not configured' }
+        return
+    }
+
+    // Call the AI API to trigger reanalysis
+    // This would typically be an async call that creates a new scan_analyses record
+    // For now, return a message indicating the request was received
+    ctx.response.status = 202
+    ctx.response.body = {
+        message: 'Reanalysis requested',
+        scanId: scanId
     }
 }

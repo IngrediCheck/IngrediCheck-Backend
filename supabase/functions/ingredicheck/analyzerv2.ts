@@ -1,3 +1,29 @@
+/**
+ * @deprecated This module is part of the legacy unified analysis system (SSE stream).
+ *
+ * SUPERSEDED BY: The new v2 Scan API
+ * - Barcode scans: POST /ingredicheck/v2/scan/barcode (Python AI API)
+ * - Photo scans: POST /ingredicheck/v2/scan/{id}/image + polling
+ * - Analysis stored in: scan_analyses table
+ *
+ * This legacy module:
+ * - Handles both barcode and image extraction in one SSE stream
+ * - Logs to legacy tables via background functions:
+ *   - background/log_inventory (OpenFoodFacts lookups)
+ *   - background/log_extract (image extraction results)
+ *   - background/log_images (image metadata)
+ *   - background/log_analyzebarcode (analysis results)
+ * - Uses client_activity_id for tracking (legacy system)
+ * - Does not persist analysis results for later retrieval
+ *
+ * The new scan system:
+ * - Separates barcode and photo scan flows
+ * - Stores all data in scans, scan_images, scan_analyses tables
+ * - Supports re-analysis when food notes change
+ * - Provides full scan history with favorites and feedback
+ *
+ * DO NOT use this for new development.
+ */
 import { Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 import * as DB from '../shared/db.ts'
 import { extractorAgent } from '../shared/llm/extractoragent.ts'

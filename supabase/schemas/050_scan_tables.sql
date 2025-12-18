@@ -9,10 +9,7 @@ CREATE TABLE public.scans (
     product_info jsonb NOT NULL DEFAULT '{}'::jsonb,
     images_processed integer NOT NULL DEFAULT 0,
     status text NOT NULL DEFAULT 'idle' CHECK (status IN ('idle', 'processing')),
-    analysis_status text CHECK (analysis_status IN ('analyzing', 'complete', 'stale')),
-    analysis_started_at timestamptz,
-    analysis_completed_at timestamptz,
-    analysis_result jsonb,
+    is_favorited boolean NOT NULL DEFAULT false,
     latest_guidance text,
     latest_error_message text,
     created_at timestamptz NOT NULL DEFAULT now(),
@@ -36,6 +33,7 @@ CREATE TABLE public.scan_images (
 -- Indexes
 CREATE INDEX idx_scans_user_activity ON public.scans(user_id, last_activity_at DESC);
 CREATE INDEX idx_scans_user_barcode ON public.scans(user_id, barcode) WHERE barcode IS NOT NULL;
+CREATE INDEX idx_scans_user_favorited ON public.scans(user_id, is_favorited) WHERE is_favorited = true;
 CREATE INDEX idx_scan_images_scan ON public.scan_images(scan_id, queued_at DESC);
 CREATE INDEX idx_scan_images_pending ON public.scan_images(status, queued_at) WHERE status = 'pending';
 

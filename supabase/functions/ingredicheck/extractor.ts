@@ -1,4 +1,27 @@
-
+/**
+ * @deprecated This module is part of the legacy image extraction system.
+ *
+ * SUPERSEDED BY: The new v2 Scan API photo scan flow
+ * - Submit images: POST /ingredicheck/v2/scan/{id}/image
+ * - Extraction runs automatically via Python AI API
+ * - Results stored in: scan_images.extraction_result + scans.product_info
+ *
+ * This legacy module:
+ * - Extracts product info from images via extractorAgent
+ * - Logs to legacy tables via background functions:
+ *   - background/log_images (image metadata)
+ *   - background/log_extract (extraction results)
+ * - Uses client_activity_id for tracking (legacy system)
+ * - Returns extraction inline, not stored for later retrieval
+ *
+ * The new scan system:
+ * - Uploads images to scan_images table with status lifecycle
+ * - Processes images asynchronously via Python AI API
+ * - Stores extraction results in scan_images.extraction_result
+ * - Accumulates product_info in scans table across multiple images
+ *
+ * DO NOT use this for new development.
+ */
 import { Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
 import * as DB from '../shared/db.ts'
 import { extractorAgent } from '../shared/llm/extractoragent.ts'
