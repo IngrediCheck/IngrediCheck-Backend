@@ -359,6 +359,47 @@ export function registerMemojiRoutes(router: Router, serviceClient: SupabaseClie
             ctx.response.body = { error: { message: "Internal error during memoji generation." } };
         }
     });
+
+    router.get("/ingredicheck/memojis/latest", async (ctx: MemojiContext) => {
+        const supabase = serviceClient ?? getSupabaseServiceClient();
+        const userId = ctx.state.userId as string | undefined;
+
+        if (!userId) {
+            ctx.response.status = 401;
+            ctx.response.body = { error: { code: "AUTH_REQUIRED", message: "Sign in required." } };
+            return;
+        }
+
+        const limit = Number(ctx.request.url.searchParams.get("limit") ?? "10");
+        const offset = Number(ctx.request.url.searchParams.get("offset") ?? "0");
+
+        if (isNaN(limit) || limit < 1 || limit > 100) {
+            ctx.response.status = 400;
+            ctx.response.body = { error: { message: "Invalid limit parameter." } };
+            return;
+        }
+
+        if (isNaN(offset) || offset < 0) {
+            ctx.response.status = 400;
+            ctx.response.body = { error: { message: "Invalid offset parameter." } };
+            return;
+        }
+
+        const { data, error } = await supabase.rpc("get_latest_memojis", {
+            p_limit: limit,
+            p_offset: offset,
+        });
+
+        if (error) {
+            console.error("Failed to fetch latest memojis", error);
+            ctx.response.status = 500;
+            ctx.response.body = { error: { message: "Internal error fetching memojis." } };
+            return;
+        }
+
+        ctx.response.status = 200;
+        ctx.response.body = { memojis: data };
+    });
 }
 
 // Test helpers (exported for offline/unit tests)
