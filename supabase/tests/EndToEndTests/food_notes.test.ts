@@ -65,157 +65,6 @@ async function call<T>(options: CallOptions & { parseJson?: boolean }): Promise<
 }
 
 // =============================================================================
-// Single Player (Personal Family) Tests
-// =============================================================================
-
-Deno.test("food notes: init personal family", async () => {
-  const { accessToken, baseUrl } = await signInAnon();
-  const selfMember = {
-    id: crypto.randomUUID(),
-    name: "Solo User",
-    color: "#264653",
-  };
-
-  const { data } = await call<{ selfMember?: { joined?: boolean; name?: string } }>({
-    accessToken,
-    baseUrl,
-    path: "/ingredicheck/family/personal",
-    method: "POST",
-    body: selfMember,
-    expectStatus: 201,
-    parseJson: true,
-  });
-
-  assertEquals(data?.selfMember?.joined, true, "selfMember should be joined");
-  assertEquals(data?.selfMember?.name, selfMember.name, "selfMember name should match");
-});
-
-Deno.test("food notes: init personal family fails if already in family", async () => {
-  const { accessToken, baseUrl } = await signInAnon();
-
-  // Create shared family first
-  await call({
-    accessToken,
-    baseUrl,
-    path: "/ingredicheck/family",
-    method: "POST",
-    body: {
-      name: "Shared Family",
-      selfMember: { id: crypto.randomUUID(), name: "Owner", color: "#000000" },
-    },
-    expectStatus: 201,
-  });
-
-  // Try to create personal family - should fail
-  const { status } = await call({
-    accessToken,
-    baseUrl,
-    path: "/ingredicheck/family/personal",
-    method: "POST",
-    body: { id: crypto.randomUUID(), name: "Solo", color: "#111111" },
-  });
-
-  assertNotEquals(status, 201, "Should not create personal family when already in a family");
-});
-
-Deno.test("food notes: single player get/set food note (auto-detect)", async () => {
-  const { accessToken, baseUrl } = await signInAnon();
-
-  // Create personal family
-  await call({
-    accessToken,
-    baseUrl,
-    path: "/ingredicheck/family/personal",
-    method: "POST",
-    body: { id: crypto.randomUUID(), name: "Solo", color: "#264653" },
-    expectStatus: 201,
-  });
-
-  // Set food note (auto-detect should use self member)
-  const noteContent = { allergies: ["peanuts"], preferences: "vegetarian" };
-  const { data: setResult } = await call<{ content: unknown; version: number }>({
-    accessToken,
-    baseUrl,
-    path: "/ingredicheck/family/food-notes",
-    method: "PUT",
-    body: { content: noteContent, version: 0 },
-    expectStatus: 200,
-    parseJson: true,
-  });
-
-  assertEquals(setResult?.version, 1, "First version should be 1");
-  assertDeepEquals(setResult?.content, noteContent, "Content should match");
-
-  // Get food note (auto-detect)
-  const { data: getResult } = await call<{ content: unknown; version: number }>({
-    accessToken,
-    baseUrl,
-    path: "/ingredicheck/family/food-notes",
-    expectStatus: 200,
-    parseJson: true,
-  });
-
-  assertEquals(getResult?.version, 1, "Version should be 1");
-  assertDeepEquals(getResult?.content, noteContent, "Content should match");
-});
-
-Deno.test("food notes: single player food note versioning", async () => {
-  const { accessToken, baseUrl } = await signInAnon();
-
-  await call({
-    accessToken,
-    baseUrl,
-    path: "/ingredicheck/family/personal",
-    method: "POST",
-    body: { id: crypto.randomUUID(), name: "Solo", color: "#264653" },
-    expectStatus: 201,
-  });
-
-  // Set note v1
-  await call({
-    accessToken,
-    baseUrl,
-    path: "/ingredicheck/family/food-notes",
-    method: "PUT",
-    body: { content: { version: "v1" }, version: 0 },
-    expectStatus: 200,
-  });
-
-  // Set note v2
-  await call({
-    accessToken,
-    baseUrl,
-    path: "/ingredicheck/family/food-notes",
-    method: "PUT",
-    body: { content: { version: "v2" }, version: 1 },
-    expectStatus: 200,
-  });
-
-  // Set note v3
-  await call({
-    accessToken,
-    baseUrl,
-    path: "/ingredicheck/family/food-notes",
-    method: "PUT",
-    body: { content: { version: "v3" }, version: 2 },
-    expectStatus: 200,
-  });
-
-  // Get history
-  const { data: history } = await call<Array<{ version: number; content: unknown }>>({
-    accessToken,
-    baseUrl,
-    path: "/ingredicheck/family/food-notes/history",
-    expectStatus: 200,
-    parseJson: true,
-  });
-
-  assertEquals(history?.length, 2, "Should have 2 history entries");
-  assertEquals(history?.[0]?.version, 2, "First history entry should be v2");
-  assertEquals(history?.[1]?.version, 1, "Second history entry should be v1");
-});
-
-// =============================================================================
 // Multi-Member Family Tests
 // =============================================================================
 
@@ -374,9 +223,12 @@ Deno.test("food notes: optimistic locking - version mismatch returns 409 with cu
   await call({
     accessToken,
     baseUrl,
-    path: "/ingredicheck/family/personal",
+    path: "/ingredicheck/family",
     method: "POST",
-    body: { id: crypto.randomUUID(), name: "Solo", color: "#264653" },
+    body: {
+      name: "Test Family",
+      selfMember: { id: crypto.randomUUID(), name: "Solo", color: "#264653" },
+    },
     expectStatus: 201,
   });
 
@@ -457,9 +309,12 @@ Deno.test("food notes: optimistic locking - client can retry with correct versio
   await call({
     accessToken,
     baseUrl,
-    path: "/ingredicheck/family/personal",
+    path: "/ingredicheck/family",
     method: "POST",
-    body: { id: crypto.randomUUID(), name: "Solo", color: "#264653" },
+    body: {
+      name: "Test Family",
+      selfMember: { id: crypto.randomUUID(), name: "Solo", color: "#264653" },
+    },
     expectStatus: 201,
   });
 
@@ -505,9 +360,12 @@ Deno.test("food notes: optimistic locking - creating new note with non-zero vers
   await call({
     accessToken,
     baseUrl,
-    path: "/ingredicheck/family/personal",
+    path: "/ingredicheck/family",
     method: "POST",
-    body: { id: crypto.randomUUID(), name: "Solo", color: "#264653" },
+    body: {
+      name: "Test Family",
+      selfMember: { id: crypto.randomUUID(), name: "Solo", color: "#264653" },
+    },
     expectStatus: 201,
   });
 
@@ -532,9 +390,12 @@ Deno.test("food notes: optimistic locking - client behind by multiple versions",
   await call({
     accessToken,
     baseUrl,
-    path: "/ingredicheck/family/personal",
+    path: "/ingredicheck/family",
     method: "POST",
-    body: { id: crypto.randomUUID(), name: "Solo", color: "#264653" },
+    body: {
+      name: "Test Family",
+      selfMember: { id: crypto.randomUUID(), name: "Solo", color: "#264653" },
+    },
     expectStatus: 201,
   });
 
@@ -571,9 +432,12 @@ Deno.test("food notes: concurrent updates - second update fails with current sta
   await call({
     accessToken,
     baseUrl,
-    path: "/ingredicheck/family/personal",
+    path: "/ingredicheck/family",
     method: "POST",
-    body: { id: crypto.randomUUID(), name: "Solo", color: "#264653" },
+    body: {
+      name: "Test Family",
+      selfMember: { id: crypto.randomUUID(), name: "Solo", color: "#264653" },
+    },
     expectStatus: 201,
   });
 
@@ -735,81 +599,142 @@ Deno.test("food notes: unjoined member can have notes", async () => {
 // Join/Leave Note Copying Tests
 // =============================================================================
 
-Deno.test("food notes: leave family copies notes to personal family", async () => {
-  const user = await signInAnon();
-  const personalMemberId = crypto.randomUUID();
-  const sharedMemberId = crypto.randomUUID();
+Deno.test("food notes: leave family creates new single-member family with notes", async () => {
+  const user1 = await signInAnon();
+  const user2 = await signInAnon();
+  const user1MemberId = crypto.randomUUID();
+  const user2MemberId = crypto.randomUUID();
 
-  // Create personal family first
+  // User1 creates family with placeholder for user2
   await call({
-    accessToken: user.accessToken,
-    baseUrl: user.baseUrl,
-    path: "/ingredicheck/family/personal",
-    method: "POST",
-    body: { id: personalMemberId, name: "Personal", color: "#264653" },
-    expectStatus: 201,
-  });
-
-  // Create shared family (will disassociate from personal)
-  await call({
-    accessToken: user.accessToken,
-    baseUrl: user.baseUrl,
+    accessToken: user1.accessToken,
+    baseUrl: user1.baseUrl,
     path: "/ingredicheck/family",
     method: "POST",
     body: {
-      name: "Shared",
-      selfMember: { id: sharedMemberId, name: "Shared Me", color: "#000000" },
+      name: "Multi-Member Family",
+      selfMember: { id: user1MemberId, name: "User1", color: "#264653" },
+      otherMembers: [{ id: user2MemberId, name: "User2", color: "#000000" }],
     },
     expectStatus: 201,
   });
 
-  // Set food note in shared family
-  const sharedNoteContent = { diet: "vegan" };
+  // Create invite for user2
+  const { data: invite } = await call<{ inviteCode: string }>({
+    accessToken: user1.accessToken,
+    baseUrl: user1.baseUrl,
+    path: "/ingredicheck/family/invite",
+    method: "POST",
+    body: { memberID: user2MemberId },
+    expectStatus: 201,
+    parseJson: true,
+  });
+
+  // User2 joins the family
   await call({
-    accessToken: user.accessToken,
-    baseUrl: user.baseUrl,
-    path: `/ingredicheck/family/members/${sharedMemberId}/food-notes`,
+    accessToken: user2.accessToken,
+    baseUrl: user2.baseUrl,
+    path: "/ingredicheck/family/join",
+    method: "POST",
+    body: { inviteCode: invite?.inviteCode },
+    expectStatus: 201,
+  });
+
+  // Set food note for user1
+  const noteContent = { diet: "vegan" };
+  await call({
+    accessToken: user1.accessToken,
+    baseUrl: user1.baseUrl,
+    path: `/ingredicheck/family/members/${user1MemberId}/food-notes`,
     method: "PUT",
-    body: { content: sharedNoteContent, version: 0 },
+    body: { content: noteContent, version: 0 },
     expectStatus: 200,
   });
 
-  // Leave shared family
+  // User1 leaves family (should create new single-member family)
   await call({
-    accessToken: user.accessToken,
-    baseUrl: user.baseUrl,
+    accessToken: user1.accessToken,
+    baseUrl: user1.baseUrl,
     path: "/ingredicheck/family/leave",
     method: "POST",
     expectStatus: 200,
   });
 
-  // Should not be in any family now (personal family member was disassociated when joining shared)
-  // This test verifies the note copying happened before leaving
+  // Verify user1 is in a new family with notes copied
+  const { data: newFamily } = await call<{ selfMember?: { id?: string; name?: string } }>({
+    accessToken: user1.accessToken,
+    baseUrl: user1.baseUrl,
+    path: "/ingredicheck/family",
+    expectStatus: 200,
+    parseJson: true,
+  });
+
+  assertNotEquals(newFamily?.selfMember?.id, user1MemberId, "Should be in a new family with different member ID");
+
+  // Check that notes were copied
+  const { data: note } = await call<{ content: unknown }>({
+    accessToken: user1.accessToken,
+    baseUrl: user1.baseUrl,
+    path: `/ingredicheck/family/members/${newFamily?.selfMember?.id}/food-notes`,
+    expectStatus: 200,
+    parseJson: true,
+  });
+
+  assertDeepEquals(note?.content, noteContent, "Notes should be copied to new family");
 });
 
-Deno.test("food notes: join family copies notes from personal (Bob wins)", async () => {
-  const bob = await signInAnon();
-  const alice = await signInAnon();
-  const bobPersonalId = crypto.randomUUID();
-  const bobInAliceFamilyId = crypto.randomUUID();
+Deno.test("food notes: cannot leave family if only active member", async () => {
+  const { accessToken, baseUrl } = await signInAnon();
 
-  // Bob creates personal family with note
   await call({
-    accessToken: bob.accessToken,
-    baseUrl: bob.baseUrl,
-    path: "/ingredicheck/family/personal",
+    accessToken,
+    baseUrl,
+    path: "/ingredicheck/family",
     method: "POST",
-    body: { id: bobPersonalId, name: "Bob", color: "#264653" },
+    body: {
+      name: "Solo Family",
+      selfMember: { id: crypto.randomUUID(), name: "Owner", color: "#000000" },
+    },
     expectStatus: 201,
   });
 
-  const bobPersonalNote = { diet: "Bob's personal preferences" };
+  // Try to leave - should fail since user is only member
+  const { status } = await call({
+    accessToken,
+    baseUrl,
+    path: "/ingredicheck/family/leave",
+    method: "POST",
+  });
+
+  assertNotEquals(status, 200, "Should not be able to leave when only active member");
+});
+
+Deno.test("food notes: join family copies notes from single-member family (Bob wins)", async () => {
+  const bob = await signInAnon();
+  const alice = await signInAnon();
+  const bobSingleMemberId = crypto.randomUUID();
+  const bobInAliceFamilyId = crypto.randomUUID();
+
+  // Bob creates single-member family with note
   await call({
     accessToken: bob.accessToken,
     baseUrl: bob.baseUrl,
-    path: "/ingredicheck/family/food-notes",
+    path: "/ingredicheck/family",
+    method: "POST",
+    body: {
+      name: "Bob's Family",
+      selfMember: { id: bobSingleMemberId, name: "Bob", color: "#264653" },
+    },
+    expectStatus: 201,
+  });
+
+  const bobNote = { diet: "Bob's preferences" };
+  await call({
+    accessToken: bob.accessToken,
+    baseUrl: bob.baseUrl,
+    path: `/ingredicheck/family/members/${bobSingleMemberId}/food-notes`,
     method: "PUT",
-    body: { content: bobPersonalNote, version: 0 },
+    body: { content: bobNote, version: 0 },
     expectStatus: 200,
   });
 
@@ -869,7 +794,7 @@ Deno.test("food notes: join family copies notes from personal (Bob wins)", async
     parseJson: true,
   });
 
-  assertDeepEquals(bobMemberNote?.content, bobPersonalNote, "Bob's note should be his personal note (Bob wins)");
+  assertDeepEquals(bobMemberNote?.content, bobNote, "Bob's note should be his note from single-member family (Bob wins)");
 
   // Check history - Alice's note should be preserved
   const { data: history } = await call<Array<{ content: unknown }>>({
@@ -884,20 +809,12 @@ Deno.test("food notes: join family copies notes from personal (Bob wins)", async
   assertDeepEquals(history?.[0]?.content, aliceNoteForBob, "History should contain Alice's original note");
 });
 
-Deno.test("food notes: join family without personal notes - no copy", async () => {
+Deno.test("food notes: join family from new user - no copy", async () => {
   const user = await signInAnon();
   const owner = await signInAnon();
   const memberId = crypto.randomUUID();
 
-  // User creates personal family but NO note
-  await call({
-    accessToken: user.accessToken,
-    baseUrl: user.baseUrl,
-    path: "/ingredicheck/family/personal",
-    method: "POST",
-    body: { id: crypto.randomUUID(), name: "User", color: "#264653" },
-    expectStatus: 201,
-  });
+  // User has NO existing family
 
   // Owner creates family with member for user
   await call({
@@ -945,7 +862,7 @@ Deno.test("food notes: join family without personal notes - no copy", async () =
     expectStatus: 201,
   });
 
-  // Check note - should still be owner's note since user had no personal note
+  // Check note - should still be owner's note since user had no existing family
   const { data: note } = await call<{ content: unknown }>({
     accessToken: user.accessToken,
     baseUrl: user.baseUrl,
@@ -954,7 +871,7 @@ Deno.test("food notes: join family without personal notes - no copy", async () =
     parseJson: true,
   });
 
-  assertDeepEquals(note?.content, ownerNote, "Note should be owner's note (user had no personal note)");
+  assertDeepEquals(note?.content, ownerNote, "Note should be owner's note (user had no existing family)");
 });
 
 // =============================================================================
@@ -967,9 +884,12 @@ Deno.test("food notes: history pruning to 10 entries", async () => {
   await call({
     accessToken,
     baseUrl,
-    path: "/ingredicheck/family/personal",
+    path: "/ingredicheck/family",
     method: "POST",
-    body: { id: crypto.randomUUID(), name: "Solo", color: "#264653" },
+    body: {
+      name: "Test Family",
+      selfMember: { id: crypto.randomUUID(), name: "Solo", color: "#264653" },
+    },
     expectStatus: 201,
   });
 
@@ -1183,56 +1103,6 @@ Deno.test("food notes: soft-deleted member's notes behavior", async () => {
   assertEquals(data?.memberNotes?.[memberId], undefined, "Deleted member's note should not appear in get_all_food_notes");
 });
 
-Deno.test("food notes: create shared family copies notes from personal family", async () => {
-  const { accessToken, baseUrl } = await signInAnon();
-  const personalMemberId = crypto.randomUUID();
-  const sharedMemberId = crypto.randomUUID();
-
-  // Create personal family with note
-  await call({
-    accessToken,
-    baseUrl,
-    path: "/ingredicheck/family/personal",
-    method: "POST",
-    body: { id: personalMemberId, name: "Personal", color: "#264653" },
-    expectStatus: 201,
-  });
-
-  const personalNote = { source: "personal" };
-  await call({
-    accessToken,
-    baseUrl,
-    path: "/ingredicheck/family/food-notes",
-    method: "PUT",
-    body: { content: personalNote, version: 0 },
-    expectStatus: 200,
-  });
-
-  // Create shared family
-  await call({
-    accessToken,
-    baseUrl,
-    path: "/ingredicheck/family",
-    method: "POST",
-    body: {
-      name: "Shared",
-      selfMember: { id: sharedMemberId, name: "Shared Me", color: "#000000" },
-    },
-    expectStatus: 201,
-  });
-
-  // Check note in shared family - should be copied from personal
-  const { data: note } = await call<{ content: unknown }>({
-    accessToken,
-    baseUrl,
-    path: `/ingredicheck/family/members/${sharedMemberId}/food-notes`,
-    expectStatus: 200,
-    parseJson: true,
-  });
-
-  assertDeepEquals(note?.content, personalNote, "Note should be copied from personal family");
-});
-
 Deno.test("food notes: get all food notes returns empty when no notes exist", async () => {
   const { accessToken, baseUrl } = await signInAnon();
 
@@ -1319,16 +1189,19 @@ Deno.test("food notes: get all returns dictionary with only members that have no
 Deno.test("food notes: copied note does not include history", async () => {
   const user = await signInAnon();
   const owner = await signInAnon();
-  const personalId = crypto.randomUUID();
+  const userMemberId = crypto.randomUUID();
   const memberId = crypto.randomUUID();
 
-  // User creates personal family and edits note multiple times
+  // User creates single-member family and edits note multiple times
   await call({
     accessToken: user.accessToken,
     baseUrl: user.baseUrl,
-    path: "/ingredicheck/family/personal",
+    path: "/ingredicheck/family",
     method: "POST",
-    body: { id: personalId, name: "User", color: "#264653" },
+    body: {
+      name: "User's Family",
+      selfMember: { id: userMemberId, name: "User", color: "#264653" },
+    },
     expectStatus: 201,
   });
 
@@ -1336,7 +1209,7 @@ Deno.test("food notes: copied note does not include history", async () => {
     await call({
       accessToken: user.accessToken,
       baseUrl: user.baseUrl,
-      path: "/ingredicheck/family/food-notes",
+      path: `/ingredicheck/family/members/${userMemberId}/food-notes`,
       method: "PUT",
       body: { content: { edit: i + 1 }, version: i },
       expectStatus: 200,

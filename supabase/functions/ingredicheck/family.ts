@@ -34,7 +34,6 @@ export function registerFamilyRoutes(router: Router) {
     router
         .post('/ingredicheck/family', createFamily)
         .get('/ingredicheck/family', getFamily)
-        .post('/ingredicheck/family/personal', initPersonalFamily)
         .post('/ingredicheck/family/invite', createInvite)
         .post('/ingredicheck/family/join', joinFamily)
         .post('/ingredicheck/family/leave', leaveFamily)
@@ -314,30 +313,6 @@ function isSupabaseError(error: unknown): error is { message?: string } {
 }
 
 // Food Notes Handlers
-
-async function initPersonalFamily(ctx: FamilyContext) {
-    try {
-        const body = await ctx.request.body({ type: 'json' }).value as CreateFamilyMemberPayload
-
-        const check = validateMemberInput(body)
-        if (!check.ok) {
-            ctx.response.status = 400
-            ctx.response.body = { error: check.error }
-            return
-        }
-
-        const { data, error } = await ctx.state.supabaseClient.rpc('init_personal_family', {
-            self_member: body
-        })
-
-        if (error) throw error
-
-        ctx.response.status = 201
-        ctx.response.body = data
-    } catch (error) {
-        handleError(ctx, 'Error creating personal family', error)
-    }
-}
 
 async function getAllFoodNotes(ctx: FamilyContext) {
     try {

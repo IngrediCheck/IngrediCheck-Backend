@@ -14,40 +14,24 @@ DECLARE
     new_family_id uuid;
     self_member_id uuid;
     current_user_id uuid := auth.uid();
-    personal_member_id uuid;
-    is_in_non_personal_family boolean;
 BEGIN
     IF current_user_id IS NULL THEN
         RAISE EXCEPTION 'User must be authenticated to create a family';
     END IF;
 
-    -- Check if user is in a non-personal family
-    SELECT EXISTS (
+    -- Check if user is already in any family
+    IF EXISTS (
         SELECT 1
-        FROM public.members m
-        JOIN public.families f ON f.id = m.family_id
-        WHERE m.user_id = current_user_id
-          AND m.deleted_at IS NULL
-          AND f.is_personal = false
-    ) INTO is_in_non_personal_family;
-
-    IF is_in_non_personal_family THEN
+        FROM public.members
+        WHERE user_id = current_user_id
+          AND deleted_at IS NULL
+    ) THEN
         RAISE EXCEPTION 'User is already part of a family';
     END IF;
 
-    -- Get personal family member id for note copying
-    personal_member_id := public.get_personal_family_member_id();
-
-    -- Disassociate from personal family if exists
-    IF personal_member_id IS NOT NULL THEN
-        UPDATE public.members
-        SET user_id = NULL
-        WHERE id = personal_member_id;
-    END IF;
-
-    -- Create new shared family
-    INSERT INTO public.families (name, is_personal)
-    VALUES (family_name, false)
+    -- Create new family
+    INSERT INTO public.families (name)
+    VALUES (family_name)
     RETURNING id INTO new_family_id;
 
     INSERT INTO public.members (
@@ -65,11 +49,6 @@ BEGIN
         self_member->>'imageFileHash',
         current_user_id
     ) RETURNING id INTO self_member_id;
-
-    -- Copy notes from personal family to new self member
-    IF personal_member_id IS NOT NULL THEN
-        PERFORM public.copy_food_note(personal_member_id, self_member_id, self_member_id);
-    END IF;
 
     IF other_members IS NOT NULL THEN
         INSERT INTO public.members (
@@ -224,7 +203,8 @@ AS $$
 DECLARE
     invite record;
     current_user_id uuid := auth.uid();
-    personal_member_id uuid;
+    current_member record;
+    member_count integer;
 BEGIN
     IF current_user_id IS NULL THEN
         RAISE EXCEPTION 'User must be authenticated to join a family';
@@ -256,8 +236,11 @@ BEGIN
         RAISE EXCEPTION 'Member associated with this invite code is already joined';
     END IF;
 
-    -- Get personal family member id for note copying
-    personal_member_id := public.get_personal_family_member_id();
+    -- Get user's current member for note copying
+    SELECT * INTO current_member
+    FROM public.members
+    WHERE user_id = current_user_id
+      AND deleted_at IS NULL;
 
     -- Disassociate user from current member(s)
     UPDATE public.members
@@ -274,9 +257,17 @@ BEGIN
         RAISE EXCEPTION 'Failed to associate member with user. The member might have been joined by someone else.';
     END IF;
 
-    -- Copy notes from personal family to target member ("Bob wins")
-    IF personal_member_id IS NOT NULL THEN
-        PERFORM public.copy_food_note(personal_member_id, invite.member_id, invite.member_id);
+    -- Copy notes from single-member family to target member ("Bob wins")
+    IF current_member.id IS NOT NULL THEN
+        SELECT COUNT(*) INTO member_count
+        FROM public.members
+        WHERE family_id = current_member.family_id
+          AND deleted_at IS NULL;
+
+        -- Only copy if user was in a single-member family
+        IF member_count = 1 THEN
+            PERFORM public.copy_food_note(current_member.id, invite.member_id, invite.member_id);
+        END IF;
     END IF;
 
     UPDATE public.invite_codes
@@ -296,26 +287,55 @@ SET search_path = public
 AS $$
 DECLARE
     current_member record;
-    personal_member_id uuid;
+    member_count integer;
+    new_family_id uuid;
+    new_member_id uuid;
+    current_user_id uuid := auth.uid();
 BEGIN
     SELECT * INTO current_member
     FROM public.members
-    WHERE user_id = auth.uid()
+    WHERE user_id = current_user_id
       AND deleted_at IS NULL;
 
     IF NOT FOUND THEN
         RAISE EXCEPTION 'User is not a member of any family';
     END IF;
 
-    -- Get personal family member id for note copying
-    personal_member_id := public.get_personal_family_member_id();
+    -- Check if user is the only active member
+    SELECT COUNT(*) INTO member_count
+    FROM public.members
+    WHERE family_id = current_member.family_id
+      AND deleted_at IS NULL
+      AND user_id IS NOT NULL;
 
-    -- Copy notes to personal family if it exists (and not leaving the personal family itself)
-    IF personal_member_id IS NOT NULL AND personal_member_id <> current_member.id THEN
-        PERFORM public.copy_food_note(current_member.id, personal_member_id, personal_member_id);
+    IF member_count = 1 THEN
+        RAISE EXCEPTION 'Cannot leave family: you are the only active member';
     END IF;
 
-    -- Disassociate user from current member
+    -- Create new single-member family
+    INSERT INTO public.families (name)
+    VALUES (current_member.name)
+    RETURNING id INTO new_family_id;
+
+    -- Create new member in the new family
+    INSERT INTO public.members (
+        family_id,
+        name,
+        color,
+        image_file_hash,
+        user_id
+    ) VALUES (
+        new_family_id,
+        current_member.name,
+        current_member.color,
+        current_member.image_file_hash,
+        current_user_id
+    ) RETURNING id INTO new_member_id;
+
+    -- Copy notes from old member to new member
+    PERFORM public.copy_food_note(current_member.id, new_member_id, new_member_id);
+
+    -- Disassociate user from old family member
     UPDATE public.members
     SET user_id = NULL
     WHERE id = current_member.id;
