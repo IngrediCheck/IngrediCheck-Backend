@@ -266,7 +266,7 @@ Deno.test("family management: invite + join flow", async () => {
   assertEquals(join.data?.selfMember?.joined, true);
 });
 
-Deno.test("family management: leave household removes access", async () => {
+Deno.test("family management: cannot leave when only active member", async () => {
   const { accessToken, baseUrl } = await signInAnon();
   const selfId = crypto.randomUUID();
 
@@ -282,21 +282,78 @@ Deno.test("family management: leave household removes access", async () => {
     expectStatus: 201,
   });
 
-  await callFamily({
+  // Try to leave - should fail since user is only active member
+  const leaveResult = await callFamily({
     accessToken,
     baseUrl,
+    path: "/ingredicheck/family/leave",
+    method: "POST",
+  });
+
+  assertNotEquals(leaveResult.status, 200, "Should not be able to leave when only active member");
+});
+
+Deno.test("family management: leave multi-member family creates new single-member family", async () => {
+  const user1 = await signInAnon();
+  const user2 = await signInAnon();
+  const user1Id = crypto.randomUUID();
+  const user2Id = crypto.randomUUID();
+
+  // User1 creates a family with a placeholder for user2
+  await callFamily({
+    accessToken: user1.accessToken,
+    baseUrl: user1.baseUrl,
+    path: "/ingredicheck/family",
+    method: "POST",
+    body: {
+      name: "Multi Family",
+      selfMember: { id: user1Id, name: "User One", color: "#111111" },
+      otherMembers: [{ id: user2Id, name: "User Two", color: "#222222" }],
+    },
+    expectStatus: 201,
+  });
+
+  // User1 creates invite for user2
+  const invite = await callFamily<{ inviteCode?: string }>({
+    accessToken: user1.accessToken,
+    baseUrl: user1.baseUrl,
+    path: "/ingredicheck/family/invite",
+    method: "POST",
+    body: { memberID: user2Id },
+    expectStatus: 201,
+    parseJson: true,
+  });
+
+  // User2 joins the family
+  await callFamily({
+    accessToken: user2.accessToken,
+    baseUrl: user2.baseUrl,
+    path: "/ingredicheck/family/join",
+    method: "POST",
+    body: { inviteCode: invite.data?.inviteCode },
+    expectStatus: 201,
+  });
+
+  // User1 leaves the family - should succeed since there are 2 active members
+  await callFamily({
+    accessToken: user1.accessToken,
+    baseUrl: user1.baseUrl,
     path: "/ingredicheck/family/leave",
     method: "POST",
     expectStatus: 200,
   });
 
-  const postLeave = await callFamily({
-    accessToken,
-    baseUrl,
+  // User1 should now be in a new single-member family
+  const user1Family = await callFamily<{ name?: string; otherMembers?: unknown[] }>({
+    accessToken: user1.accessToken,
+    baseUrl: user1.baseUrl,
     path: "/ingredicheck/family",
+    expectStatus: 200,
+    parseJson: true,
   });
 
-  assertNotEquals(postLeave.status, 200);
+  assertEquals(user1Family.data?.name, "User One", "New family should be named after the user");
+  assertEquals(user1Family.data?.otherMembers?.length, 0, "New family should have no other members");
 });
 
 Deno.test("family management: validation and guard rails", async () => {
