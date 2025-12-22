@@ -1,82 +1,89 @@
 
-import { functionsUrl, signInAnon, createSupabaseServiceClient } from "../_shared/utils.ts";
+import { functionsUrl, signInAnon, createSupabaseServiceClient, resolveSupabaseConfig } from "../_shared/utils.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { assertEquals, assertExists, assert } from "https://deno.land/std@0.192.0/testing/asserts.ts";
 
-function assertEquals<T>(actual: T, expected: T, message?: string): void {
-  if (!Object.is(actual, expected)) {
-    throw new Error(
-      message ?? `Assertion failed: expected ${expected}, received ${actual}`,
-    );
-  }
-}
+const BUCKET_NAME = "memoji-images";
 
-function assertExists(actual: unknown, message?: string): void {
-  if (actual === undefined || actual === null) {
-    throw new Error(message ?? "Expected value to exist");
-  }
-}
-
-function assertArray(actual: unknown, message?: string): void {
-  if (!Array.isArray(actual)) {
-    throw new Error(message ?? `Expected value to be an array, but got ${typeof actual}`);
-  }
+async function setupUser(baseUrl: string) {
+    const { accessToken } = await signInAnon();
+    // Create a client scoped to this user ("authenticated" role)
+    // We explicitly use the ANON key but pass the User's Access Token in the Authorization header.
+    // This ensures that 'auth.uid()' in Postgres resolves to this user.
+    const { anonKey } = await resolveSupabaseConfig();
+    const client = createClient(baseUrl, anonKey, {
+        global: { headers: { Authorization: `Bearer ${accessToken}` } },
+        auth: { persistSession: false, autoRefreshToken: false }
+    });
+    
+    return { client, accessToken };
 }
 
 Deno.test({
-    name: "memoji: get_latest_memojis",
+    name: "memoji: lifecycle (seed, fetch, pagination, cleanup)",
     sanitizeOps: false,
     sanitizeResources: false,
-    fn: async () => {
-    const { accessToken, baseUrl } = await signInAnon();
-
-    // Seed: Upload a dummy file if needed
-    const supabase = createSupabaseServiceClient({ baseUrl });
-    
-    // Ensure bucket exists
-    await supabase.storage.createBucket("memoji-images", { public: true });
-
-    // Upload a test file
-    const testFileName = `test-${Date.now()}.txt`;
-    const { error: uploadError } = await supabase.storage
-        .from("memoji-images")
-        .upload(testFileName, new Blob(["dummy content"]), { upsert: true });
+    fn: async (t) => {
+        // Shared setup
+        const { baseUrl } = await signInAnon();
+        const serviceClient = createSupabaseServiceClient({ baseUrl });
+        // Ensure bucket exists (using service role to be safe/idempotent)
+        await serviceClient.storage.createBucket(BUCKET_NAME, { public: true });
         
-    if (uploadError) {
-        console.warn("Failed to seed dummy file (might already exist or permission issue):", uploadError);
-    } else {
-        console.log("Seeded dummy file:", testFileName);
-    }
+        // 1. Unauthorized Access Test
+        await t.step("should fail without auth (401)", async () => {
+            const res = await fetch(`${functionsUrl(baseUrl)}/ingredicheck/memojis/latest`, {
+                method: "GET"
+            });
+            assertEquals(res.status, 401);
+        });
 
-    // Call the Edge Function
-    const response = await fetch(`${functionsUrl(baseUrl)}/ingredicheck/memojis/latest?limit=10&offset=0`, {
-        method: "GET",
-        headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-        }
-    });
-
-    if (response.status !== 200) {
-        const text = await response.text();
-        throw new Error(`RPC call failed with status ${response.status}: ${text}`);
+        // 2. Pagination & Security Test
+        await t.step("should return only user OWNED memojis and support pagination", async () => {
+             // Create User A
+             const userA = await setupUser(baseUrl);
+             
+             // Upload 3 files for User A with delays to ensure order
+             const filesA = ["fileA1.txt", "fileA2.txt", "fileA3.txt"];
+             for (const f of filesA) {
+                 const { error } = await userA.client.storage.from(BUCKET_NAME).upload(f, new Blob(["content"]), { upsert: true });
+                 if (error) throw error;
+                 // robust time gap for ordering
+                 await new Promise(r => setTimeout(r, 100)); 
+             }
+             
+             // Verify User A sees 3 files
+             const listResponse = await fetch(`${functionsUrl(baseUrl)}/ingredicheck/memojis/latest?limit=10`, {
+                 headers: { Authorization: `Bearer ${userA.accessToken}` }
+             });
+             if (listResponse.status !== 200) {
+                 console.error("Fetch failed:", listResponse.status, await listResponse.text());
+             }
+             assertEquals(listResponse.status, 200);
+             const data = await listResponse.json();
+             assertExists(data.memojis);
+             assertEquals(data.memojis.length, 3);
+             
+             // Check Pagination: Limit 2
+             const page1Res = await fetch(`${functionsUrl(baseUrl)}/ingredicheck/memojis/latest?limit=2`, {
+                 headers: { Authorization: `Bearer ${userA.accessToken}` }
+             });
+             const page1 = await page1Res.json();
+             assertEquals(page1.memojis.length, 2);
+             // Ordered by created_at DESC -> A3 (newest), A2
+             assertEquals(page1.memojis[0].name, "fileA3.txt");
+             assertEquals(page1.memojis[1].name, "fileA2.txt");
+             
+             // Check Pagination: Offset 2
+             const page2Res = await fetch(`${functionsUrl(baseUrl)}/ingredicheck/memojis/latest?limit=2&offset=2`, {
+                 headers: { Authorization: `Bearer ${userA.accessToken}` }
+             });
+             const page2 = await page2Res.json();
+             assertEquals(page2.memojis.length, 1);
+             assertEquals(page2.memojis[0].name, "fileA1.txt");
+             
+             // Cleanup User A files
+             await userA.client.storage.from(BUCKET_NAME).remove(filesA);
+        });
     }
-
-    const data = await response.json();
-    
-    // Assertions
-    assertExists(data, "Response data should exist");
-    assertArray(data.memojis, "Response.memojis should be an array");
-    
-    // We might get an empty array if the bucket is empty, which is fine for this test.
-    // The main goal is to verify the function exists and is accessible.
-    console.log(`Fetched ${data.memojis.length} memojis.`);
-    
-    // If there are items, verify structure
-    if (data.memojis.length > 0) {
-        const first = data.memojis[0];
-        assertExists(first.id, "Memoji ID should exist");
-        assertExists(first.name, "Memoji name should exist");
-        // meta check
-        // assertExists(first.metadata, "Memoji metadata should exist");
-    }
-  }
 });

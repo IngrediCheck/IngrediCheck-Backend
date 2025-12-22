@@ -361,7 +361,17 @@ export function registerMemojiRoutes(router: Router, serviceClient: SupabaseClie
     });
 
     router.get("/ingredicheck/memojis/latest", async (ctx: MemojiContext) => {
-        const supabase = serviceClient ?? getSupabaseServiceClient();
+        const clientIP = ctx.request.headers.get("x-forwarded-for") ??
+            ctx.request.ip ??
+            "unknown";
+
+        const rate = checkRateLimit(clientIP ?? "unknown");
+        if (!rate.allowed) {
+            ctx.response.status = 429;
+            ctx.response.body = { error: { message: "Rate limit exceeded." } };
+            return;
+        }
+
         const userId = ctx.state.userId as string | undefined;
 
         if (!userId) {
@@ -369,6 +379,14 @@ export function registerMemojiRoutes(router: Router, serviceClient: SupabaseClie
             ctx.response.body = { error: { code: "AUTH_REQUIRED", message: "Sign in required." } };
             return;
         }
+
+        // Create a user-scoped client to ensure auth.uid() works in the DB function
+        const authHeader = ctx.request.headers.get("Authorization") ?? "";
+        const userClient = createClient(
+            Deno.env.get("SUPABASE_URL") ?? "",
+            Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+            { global: { headers: { Authorization: authHeader } } }
+        );
 
         const limit = Number(ctx.request.url.searchParams.get("limit") ?? "10");
         const offset = Number(ctx.request.url.searchParams.get("offset") ?? "0");
@@ -385,7 +403,7 @@ export function registerMemojiRoutes(router: Router, serviceClient: SupabaseClie
             return;
         }
 
-        const { data, error } = await supabase.rpc("get_latest_memojis", {
+        const { data, error } = await userClient.rpc("get_latest_memojis", {
             p_limit: limit,
             p_offset: offset,
         });
