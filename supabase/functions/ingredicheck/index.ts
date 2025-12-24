@@ -367,6 +367,9 @@ router
     .post('/ingredicheck/v2/scan/:scanId/reanalyze', async (ctx) => {
         await Scan.reanalyze(ctx)
     })
+    .post('/ingredicheck/v2/scan/:scanId/image', async (ctx) => {
+        await Scan.uploadImage(ctx)
+    })
     .post('/ingredicheck/v2/scan/feedback', async (ctx) => {
         await Feedback.submitScanFeedback(ctx)
     })

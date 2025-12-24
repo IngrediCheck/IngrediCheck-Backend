@@ -317,3 +317,157 @@ export async function reanalyze(ctx: Context) {
         scanId: scanId
     }
 }
+
+const MB = 1024 * 1024
+
+async function generateContentHash(data: Uint8Array): Promise<string> {
+    const digest = await crypto.subtle.digest('SHA-256', data)
+    return Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('')
+}
+
+export async function uploadImage(ctx: Context) {
+    const scanId = ctx.params.scanId
+
+    if (!scanId) {
+        ctx.response.status = 400
+        ctx.response.body = { error: 'scanId is required' }
+        return
+    }
+
+    // Verify scan exists and belongs to user
+    const scanResult = await ctx.state.supabaseClient
+        .from('scans')
+        .select('id, user_id, scan_type, images_processed')
+        .eq('id', scanId)
+        .single()
+
+    if (scanResult.error || !scanResult.data) {
+        ctx.response.status = 404
+        ctx.response.body = { error: 'Scan not found' }
+        return
+    }
+
+    // Parse form-data
+    let formData
+    try {
+        const body = ctx.request.body({ type: 'form-data' })
+        formData = await body.value.read({ maxSize: 10 * MB })
+    } catch (error) {
+        ctx.response.status = 400
+        ctx.response.body = { error: 'Invalid form data' }
+        return
+    }
+
+    // Get image file from form data
+    const imageFile = formData.files?.find((file: any) => 
+        file.name === 'image' || file.contentType?.startsWith('image/')
+    )
+
+    if (!imageFile || !imageFile.content) {
+        ctx.response.status = 400
+        ctx.response.body = { error: 'Image file is required' }
+        return
+    }
+
+    const imageData = imageFile.content instanceof Uint8Array 
+        ? imageFile.content 
+        : new Uint8Array(await imageFile.content)
+
+    // Generate content hash
+    const contentHash = await generateContentHash(imageData)
+
+    // Check if image already exists for this scan
+    const existingImageResult = await ctx.state.supabaseClient
+        .from('scan_images')
+        .select('id')
+        .eq('scan_id', scanId)
+        .eq('content_hash', contentHash)
+        .single()
+
+    if (existingImageResult.data) {
+        // Image already exists, update scan's last_activity_at and return existing record
+        await ctx.state.supabaseClient
+            .from('scans')
+            .update({ last_activity_at: new Date().toISOString() })
+            .eq('id', scanId)
+
+        const existingImage = await ctx.state.supabaseClient
+            .from('scan_images')
+            .select('*')
+            .eq('id', existingImageResult.data.id)
+            .single()
+
+        ctx.response.status = 200
+        ctx.response.body = {
+            id: existingImage.data?.id,
+            contentHash: existingImage.data?.content_hash,
+            status: existingImage.data?.status,
+            storagePath: existingImage.data?.storage_path,
+            queuedAt: existingImage.data?.queued_at
+        }
+        return
+    }
+
+    // Upload to storage
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const storagePath = `${year}/${month}/${scanId}/${contentHash}.jpg`
+
+    const uploadResult = await ctx.state.supabaseClient.storage
+        .from('scan-images')
+        .upload(storagePath, imageData, {
+            contentType: imageFile.contentType || 'image/jpeg',
+            upsert: false
+        })
+
+    if (uploadResult.error) {
+        console.error('[scan#uploadImage] storage upload error', uploadResult.error)
+        ctx.response.status = 500
+        ctx.response.body = { error: 'Failed to upload image' }
+        return
+    }
+
+    // Create scan_images record
+    const imageInsertResult = await ctx.state.supabaseClient
+        .from('scan_images')
+        .insert({
+            scan_id: scanId,
+            content_hash: contentHash,
+            status: 'pending',
+            storage_path: storagePath
+        })
+        .select()
+        .single()
+
+    if (imageInsertResult.error) {
+        console.error('[scan#uploadImage] insert error', imageInsertResult.error)
+        // Try to clean up uploaded file if insert fails
+        await ctx.state.supabaseClient.storage
+            .from('scan-images')
+            .remove([storagePath])
+        ctx.response.status = 500
+        ctx.response.body = { error: 'Failed to create image record' }
+        return
+    }
+
+    // Update scan's last_activity_at and increment images_processed
+    await ctx.state.supabaseClient
+        .from('scans')
+        .update({
+            last_activity_at: new Date().toISOString(),
+            images_processed: (scanResult.data.images_processed || 0) + 1
+        })
+        .eq('id', scanId)
+
+    ctx.response.status = 201
+    ctx.response.body = {
+        id: imageInsertResult.data.id,
+        contentHash: imageInsertResult.data.content_hash,
+        status: imageInsertResult.data.status,
+        storagePath: imageInsertResult.data.storage_path,
+        queuedAt: imageInsertResult.data.queued_at
+    }
+}
