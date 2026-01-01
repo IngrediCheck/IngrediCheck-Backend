@@ -1,4 +1,19 @@
 import { Context } from 'https://deno.land/x/oak@v12.6.0/mod.ts'
+import { createRemoteJWKSet, jwtVerify, decodeJwt } from 'jose'
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
+
+// Cache the JWKS client (handles internal caching with 5min TTL)
+let _jwks: ReturnType<typeof createRemoteJWKSet> | null = null
+
+function getJwks() {
+    if (!_jwks && SUPABASE_URL) {
+        _jwks = createRemoteJWKSet(
+            new URL(`${SUPABASE_URL}/auth/v1/.well-known/jwks.json`)
+        )
+    }
+    return _jwks
+}
 
 function parseAuthorizationHeader(ctx: Context): string | null {
     const authHeader = ctx.request.headers.get('authorization') ?? ''
@@ -19,52 +34,74 @@ export async function decodeUserIdFromRequest(ctx: Context): Promise<string> {
         throw new Error('Missing authorization header')
     }
 
-    // In production, Supabase's edge runtime already verifies the JWT before
-    // our code runs. We decode the payload without re-verifying the signature.
-    // In local development, tokens come from the local Supabase auth service
-    // and the database is local, so signature verification adds no security value.
-    const userId = decodeJwtPayload(token)
-    if (userId) {
-        ctx.state.userId = userId
-        return userId
+    const jwks = getJwks()
+    if (!jwks) {
+        throw new Error('SUPABASE_URL not configured')
     }
 
-    throw new Error('Unauthorized: Could not extract user ID from token')
+    try {
+        // Try JWKS verification (production uses asymmetric keys)
+        const { payload } = await jwtVerify(token, jwks, {
+            issuer: `${SUPABASE_URL}/auth/v1`,
+            audience: 'authenticated',
+        })
+
+        const userId = payload.sub
+        if (!userId || typeof userId !== 'string') {
+            throw new Error('Invalid token: missing sub claim')
+        }
+
+        ctx.state.userId = userId
+        return userId
+
+    } catch (error) {
+        // Check if this is a JWKS error (empty keyset or unsupported alg in local dev)
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        const isJwksError = errorMessage.includes('no applicable key found') ||
+                           errorMessage.includes('JWKSNoMatchingKey') ||
+                           errorMessage.includes('Unsupported') ||
+                           errorMessage.includes('empty')
+
+        // For local development (HS256 with empty JWKS), decode without verification
+        // This is safe because local Supabase uses symmetric keys not exposed via JWKS
+        if (isJwksError && isLocalDevelopment()) {
+            return decodeTokenWithoutVerification(token, ctx)
+        }
+
+        throw new Error(`Unauthorized: ${errorMessage}`)
+    }
 }
 
-function decodeJwtPayload(token: string): string | null {
-    try {
-        const parts = token.split('.')
-        if (parts.length !== 3) return null
+function isLocalDevelopment(): boolean {
+    // In Docker, SUPABASE_URL is set to kong:8000, check for that too
+    // Also check LOCAL_SUPABASE_URL which explicitly indicates local dev
+    const localUrl = Deno.env.get('LOCAL_SUPABASE_URL') ?? ''
+    return SUPABASE_URL.includes('127.0.0.1') ||
+           SUPABASE_URL.includes('localhost') ||
+           SUPABASE_URL.includes('kong:') ||
+           localUrl.includes('127.0.0.1') ||
+           localUrl.includes('localhost')
+}
 
-        const payloadB64 = parts[1]
-        const payloadJson = new TextDecoder().decode(base64UrlToUint8Array(payloadB64))
-        const payload = JSON.parse(payloadJson) as Record<string, unknown>
+function decodeTokenWithoutVerification(token: string, ctx: Context): string {
+    try {
+        const payload = decodeJwt(token)
 
         // Check expiration
         const now = Math.floor(Date.now() / 1000)
-        const exp = payload?.exp
-        if (typeof exp === 'number' && now >= exp) {
-            return null // Token expired
+        if (typeof payload.exp === 'number' && now >= payload.exp) {
+            throw new Error('Token expired')
         }
 
-        const sub = payload?.sub
-        return typeof sub === 'string' ? sub : null
-    } catch {
-        return null
-    }
-}
+        const userId = payload.sub
+        if (!userId || typeof userId !== 'string') {
+            throw new Error('Invalid token: missing sub claim')
+        }
 
-function base64UrlToUint8Array(input: string): Uint8Array {
-    let normalized = input.replace(/-/g, '+').replace(/_/g, '/')
-    const padding = normalized.length % 4
-    if (padding) {
-        normalized += '='.repeat(4 - padding)
+        ctx.state.userId = userId
+        return userId
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Token decode failed'
+        throw new Error(`Unauthorized: ${message}`)
     }
-    const binary = atob(normalized)
-    const bytes = new Uint8Array(binary.length)
-    for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i)
-    }
-    return bytes
 }
