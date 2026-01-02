@@ -55,16 +55,12 @@ export async function decodeUserIdFromRequest(ctx: Context): Promise<string> {
         return userId
 
     } catch (error) {
-        // Check if this is a JWKS error (empty keyset or unsupported alg in local dev)
         const errorMessage = error instanceof Error ? error.message : String(error)
-        const isJwksError = errorMessage.includes('no applicable key found') ||
-                           errorMessage.includes('JWKSNoMatchingKey') ||
-                           errorMessage.includes('Unsupported') ||
-                           errorMessage.includes('empty')
 
-        // For local development (HS256 with empty JWKS), decode without verification
-        // This is safe because local Supabase uses symmetric keys not exposed via JWKS
-        if (isJwksError && isLocalDevelopment()) {
+        // For local development, fall back to decode-only mode for ANY JWKS error.
+        // Local Supabase uses HS256 (symmetric keys) which aren't exposed via JWKS,
+        // so JWKS verification will always fail locally (empty keyset, fetch errors, etc.)
+        if (isLocalDevelopment()) {
             return decodeTokenWithoutVerification(token, ctx)
         }
 
